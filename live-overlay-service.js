@@ -814,15 +814,15 @@ function loFirebasePushState(settings){
                 colVis:settings.colVis, elimBanner:settings.elimBanner, spotlight:settings.spotlight,
                 bg:webSafeBg, teamElimBg:webSafeTeamElimBg,
             },
-            updatedAt:Date.now(),
+            updatedAt:Date.now()+(window.loFirebase?.serverTimeOffset||0),
         }).catch(e=>console.warn('[Firebase] فشل رفع الحالة:',e));
     }catch(e){ console.warn('[Firebase] خطأ غير متوقع بالرفع:',e); }
 }
 function loFirebasePushEvent(type,payload){
     if(!window.loFirebase) return;
     try{
-        const{db,ref,push}=window.loFirebase;
-        push(ref(db,`rooms/${LO_FB_ROOM}/events`),{type,...payload,ts:Date.now()})
+        const{db,ref,push,serverTimeOffset}=window.loFirebase;
+        push(ref(db,`rooms/${LO_FB_ROOM}/events`),{type,...payload,ts:Date.now()+(serverTimeOffset||0)})
             .catch(e=>console.warn('[Firebase] فشل رفع الحدث:',e));
     }catch(e){ console.warn('[Firebase] خطأ غير متوقع بحدث:',e); }
 }
