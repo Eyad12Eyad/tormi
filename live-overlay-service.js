@@ -42,7 +42,7 @@ let loAutoTimer=null;
 let loApiKey='', loPlayerName='', loLastMatchId='';
 let loKillLockTid=null, loKillLockUntil=0;      /* منع الضغط الخاطئ على فريق آخر بعد إضافة نقطة */
 let loColVis={rank:1,elim:1,name:1,abbr:1,players:1,kills:1,place:1,total:1,logo:1,color:1,flag:1};
-let loBgSettings={headerBg:null,bodyBg:null,elimBannerBg:null};   /* {type:'image'|'video', data:base64} */
+let loBgSettings={headerBg:null,bodyBg:null,elimBannerBg:null,killCardBg:null};   /* {type:'image'|'video', data:base64} */
 let loScanStream=null, loScanRegion=null, loScanTimer=null, loScanActive=false;
 let loPendingKill=null; /* {killerTid, victimTid, victimPi} بانتظار تأكيد */
 let loOcrAutoApply=true;         /* تطبيق تلقائي فوري بدون تأكيد يدوي — الافتراضي الآن */
@@ -406,6 +406,7 @@ return `<div class="service-interface" style="padding:0">
       <div style="display:flex;gap:.5rem">
         <button class="lo-scan-mode-btn active" data-mode="killfeed" onclick="loSetScanMode('killfeed')">📰 كيل فيد</button>
         <button class="lo-scan-mode-btn" data-mode="board" onclick="loSetScanMode('board')">📋 لوحة كل الفرق</button>
+        <button class="lo-scan-mode-btn" data-mode="spectate" onclick="loSetScanMode('spectate')">📊 كارد المشاهدة</button>
       </div>
       <div style="color:#8899aa;font-size:.7rem;margin-top:.5rem;line-height:1.6" id="loScanModeHint">
         يراقب سطر "فلان قتل فلان" بالكيل فيد ويحدّث حالة اللاعب المحدد فقط (نوك/تفنيش) لحظة حدوثه.
@@ -622,6 +623,27 @@ return `<div class="service-interface" style="padding:0">
           </div>
         </div>
       </div>
+
+      <!-- كارد القتلة المفردة -->
+      <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:11px;padding:.9rem">
+        <div style="color:#00e5ff;font-size:.75rem;font-weight:800;margin-bottom:.7rem">💀 كارد القتلة المفردة</div>
+        <div style="color:#8899aa;font-size:.72rem;margin-bottom:.7rem;line-height:1.6">
+          يطلع لكل قتلة (شعار الفريق + اسمه + الضرر + المسافة + الإسقاطات) — يدوياً من أزرار "☠️ قتل" بجدول الفرق،
+          أو تلقائياً من وضع مسح "📊 كارد المشاهدة" بتاب كاميرا المسح.
+          <br>⚠️ يطلع بـ<b style="color:#ffd700">نافذة منفصلة شفافة بالكامل</b> — اسحبها كمصدر Browser Source ثالث بـ OBS (زر "نافذة كارد القتلة" فوق).
+        </div>
+        <button class="lo-big-btn primary" style="background:#ff4466;color:#fff;margin-bottom:.7rem" onclick="loOpenKillCardWindow()"><i class="fas fa-skull"></i> فتح نافذة كارد القتلة</button>
+        <div class="lo-fgroup">
+          <label class="lo-label">🖼️ خلفية الكارد (صورة أو فيديو) — اختياري</label>
+          <div class="lo-bg-zone" id="loKcBgZone" onclick="document.getElementById('loKcBgInp').click()">
+            <button class="lo-bg-clear" onclick="event.stopPropagation();loClearBg('killCardBg')">✕</button>
+            <i class="fas fa-image" style="color:#00e5ff;font-size:1.3rem"></i>
+            <div id="loKcBgPreview"></div>
+            <div style="color:#667788;font-size:.72rem;margin-top:.2rem">اضغط لرفع صورة/فيديو (مثلاً شعار الأورگ)</div>
+          </div>
+          <input type="file" id="loKcBgInp" accept="image/*,video/*" style="display:none" onchange="loSetBg('killCardBg',this)">
+        </div>
+      </div>
     </div>
   </div>
 
@@ -674,7 +696,7 @@ function loInit(){
        بعد تحميلها نعيد البث حتى تصل لأي نافذة أوفرلي مفتوحة */
     (async()=>{
         try{
-            const keys=['headerBg','bodyBg','elimBannerBg'];
+            const keys=['headerBg','bodyBg','elimBannerBg','killCardBg'];
             for(const k of keys){
                 const v=await loIdbGet(k);
                 if(v) loBgSettings[k]=v;
@@ -723,6 +745,7 @@ function loBroadcast(){
             headerBg:settings.bg.headerBg?{type:settings.bg.headerBg.type}:null,
             bodyBg:settings.bg.bodyBg?{type:settings.bg.bodyBg.type}:null,
             elimBannerBg:settings.bg.elimBannerBg?{type:settings.bg.elimBannerBg.type}:null,
+            killCardBg:settings.bg.killCardBg?{type:settings.bg.killCardBg.type}:null,
         }, teamElimBg:undefined};
         localStorage.setItem('lo_overlay_settings',JSON.stringify(lightSettings));
     }catch(e){
@@ -737,7 +760,43 @@ function loBroadcast(){
         console.warn('[loBroadcast] فشل إرسال التحديث المباشر:',e);
         loToast('⚠️ تعذر إرسال التحديث — تأكد أن نافذة الأوفرلي مفتوحة بنفس المتصفح','warn');
     }
+
+    /* مزامنة عبر الإنترنت (Firebase) — لأي جهاز ثاني مفتوح عليه أوفرلي/OBS بمكان آخر.
+       بيانات خفيفة بس (بدون فيديو/صور خلفية ثقيلة) حتى تبقى سريعة ورخيصة */
+    loFirebasePushState(settings);
 }
+
+/* ════ Firebase — مزامنة الحالة بكسور الثانية بين أي جهازين ════ */
+const LO_FB_ROOM='default';
+function loFirebasePushState(settings){
+    if(!window.loFirebase) return;
+    try{
+        const{db,ref,set}=window.loFirebase;
+        set(ref(db,`rooms/${LO_FB_ROOM}/state`),{
+            teams:loTeams.map(t=>({
+                id:t.id,name:t.name,abbr:t.abbr,logo:t.logo||null,flag:t.flag||'none',color:t.color,
+                kills:t.kills||0,placementPts:t.placementPts||0,place:t.place||null,
+                players:(t.players||[]).map(p=>({name:p.name||'',status:p.status||'alive'})),
+            })),
+            elimOrder:loEliminationOrder,
+            settings:{
+                title:settings.title, showCount:settings.showCount, theme:settings.theme, fontSize:settings.fontSize,
+                colVis:settings.colVis, elimBanner:settings.elimBanner, spotlight:settings.spotlight,
+            },
+            updatedAt:Date.now(),
+        }).catch(e=>console.warn('[Firebase] فشل رفع الحالة:',e));
+    }catch(e){ console.warn('[Firebase] خطأ غير متوقع بالرفع:',e); }
+}
+function loFirebasePushEvent(type,payload){
+    if(!window.loFirebase) return;
+    try{
+        const{db,ref,push}=window.loFirebase;
+        push(ref(db,`rooms/${LO_FB_ROOM}/events`),{type,...payload,ts:Date.now()})
+            .catch(e=>console.warn('[Firebase] فشل رفع الحدث:',e));
+    }catch(e){ console.warn('[Firebase] خطأ غير متوقع بحدث:',e); }
+}
+/* أول ما يجهز Firebase (قد يوصل متأخر عن أول تحميل)، نعيد رفع آخر حالة حتى توصل الأجهزة الثانية */
+window.addEventListener('lo-firebase-ready', ()=>{ try{ loBroadcast(); }catch(_){} });
 function loTotal(t){ return (t.kills||0)+(t.placementPts||0); }
 function loSorted(){ return [...loTeams].sort((a,b)=>loTotal(b)-loTotal(a)); }
 function loAllDead(t){ return t.players.every(p=>p.status==='eliminated'); }
@@ -1120,26 +1179,27 @@ function loAutoPlaceOnElim(t){
 
 /* إرسال حدث إقصاء لعرضه كبانر بشاشة الأوفرلي */
 function loAnnounceElimination(t){
+    const payload={ id:t.id, name:t.name, abbr:t.abbr, logo:t.logo, flag:t.flag, color:t.color, kills:t.kills||0, place:t.place };
     try{
-        loBc?.postMessage({
-            type:'TEAM_ELIMINATED',
-            team:{ id:t.id, name:t.name, abbr:t.abbr, logo:t.logo, flag:t.flag, color:t.color, kills:t.kills||0, place:t.place }
-        });
+        loBc?.postMessage({ type:'TEAM_ELIMINATED', team:payload });
     }catch(_){}
+    loFirebasePushEvent('TEAM_ELIMINATED', {team:payload});
     loToast(`☠️ ${t.name} تم إقصاؤه — المركز #${t.place}`,'warn');
 }
 
 /* كارد قتلة مفردة — بنفس ستايل شاشة اللعبة الأصلية (شعار + اسم الفريق + اللاعب + الضرر + المسافة) */
-function loAnnounceKillCard(vTeam,playerName,damage,distance){
+function loAnnounceKillCard(vTeam,playerName,damage,distance,airdrops){
+    const payload={
+        team:{ id:vTeam.id, name:vTeam.name, abbr:vTeam.abbr, logo:vTeam.logo, flag:vTeam.flag, color:vTeam.color },
+        player:playerName||'',
+        damage:damage??null,
+        distance:distance??null,
+        airdrops:airdrops??null,
+    };
     try{
-        loBc?.postMessage({
-            type:'PLAYER_KILLED',
-            team:{ id:vTeam.id, name:vTeam.name, abbr:vTeam.abbr, logo:vTeam.logo, flag:vTeam.flag, color:vTeam.color },
-            player:playerName||'',
-            damage:damage||null,
-            distance:distance||null,
-        });
+        loBc?.postMessage({ type:'PLAYER_KILLED', ...payload });
     }catch(_){}
+    loFirebasePushEvent('PLAYER_KILLED', payload);
 }
 
 /* إضافة قتلة — مع قفل مؤقت لمنع الضغط بالخطأ على فريق آخر بعد تغيّر ترتيب الجدول */
@@ -1203,16 +1263,20 @@ function loOpenKillCountPicker(killerTid,victimTid,mode){
     if(avail===0){ loToast('⚠️ ماكو لاعبين متاحين بفريق '+vTeam.abbr,'warn'); return; }
     const maxCount=Math.min(4,avail);
 
-    /* الضرر والمسافة اختياريين — يطلعون بس بوضع "قتل" لبناء كارد شبيه بكارد اللعبة الأصلي */
+    /* الضرر والمسافة والإسقاطات اختياريين — يطلعون بس بوضع "قتل" لبناء كارد شبيه بكارد اللعبة الأصلي */
     const extraFieldsHtml = isKill ? `
-        <div style="display:flex;gap:.5rem;margin-bottom:.7rem">
+        <div style="display:flex;gap:.4rem;margin-bottom:.7rem">
             <div class="lo-fgroup" style="flex:1;margin:0">
-                <label class="lo-label" style="font-size:.68rem">💥 الضرر (اختياري)</label>
-                <input type="number" class="lo-inp" id="loKcDamage" min="0" placeholder="مثلاً 177">
+                <label class="lo-label" style="font-size:.65rem">💥 الضرر</label>
+                <input type="number" class="lo-inp" id="loKcDamage" min="0" placeholder="177">
             </div>
             <div class="lo-fgroup" style="flex:1;margin:0">
-                <label class="lo-label" style="font-size:.68rem">📏 المسافة م (اختياري)</label>
-                <input type="number" class="lo-inp" id="loKcDistance" min="0" placeholder="مثلاً 203">
+                <label class="lo-label" style="font-size:.65rem">📏 المسافة م</label>
+                <input type="number" class="lo-inp" id="loKcDistance" min="0" placeholder="203">
+            </div>
+            <div class="lo-fgroup" style="flex:1;margin:0">
+                <label class="lo-label" style="font-size:.65rem">📦 إسقاطات</label>
+                <input type="number" class="lo-inp" id="loKcAirdrops" min="0" placeholder="0">
             </div>
         </div>` : '';
 
@@ -1235,6 +1299,8 @@ function loApplyTeamAction(killerTid,victimTid,mode,count){
     /* نقرا الضرر/المسافة من الحقول قبل ما نحذف النافذة */
     const damage = isKill ? (parseInt(document.getElementById('loKcDamage')?.value)||null) : null;
     const distance = isKill ? (parseInt(document.getElementById('loKcDistance')?.value)||null) : null;
+    const airdropsRaw = isKill ? parseInt(document.getElementById('loKcAirdrops')?.value) : NaN;
+    const airdrops = !isNaN(airdropsRaw) ? airdropsRaw : null;
     document.getElementById('lo-kill-picker-popup')?.remove();
     const kTeam=loTeams.find(t=>t.id===killerTid);
     const vTeam=loTeams.find(t=>t.id===victimTid);
@@ -1268,7 +1334,7 @@ function loApplyTeamAction(killerTid,victimTid,mode,count){
 
     if(isKill){
         const lastAffectedPlayer = vTeam.players[affected[affected.length-1].pi];
-        loAnnounceKillCard(vTeam, lastAffectedPlayer?.name||'', damage, distance);
+        loAnnounceKillCard(vTeam, lastAffectedPlayer?.name||'', damage, distance, airdrops);
     }
 
     const label=isKill
@@ -1553,7 +1619,7 @@ async function loClearBg(key){
     loBroadcast();
 }
 function loSyncBgUI(){
-    [['headerBg','loHeaderBgZone','loHeaderBgPreview'],['bodyBg','loBodyBgZone','loBodyBgPreview'],['elimBannerBg','loEbBgZone','loEbBgPreview']].forEach(([key,zoneId,prevId])=>{
+    [['headerBg','loHeaderBgZone','loHeaderBgPreview'],['bodyBg','loBodyBgZone','loBodyBgPreview'],['elimBannerBg','loEbBgZone','loEbBgPreview'],['killCardBg','loKcBgZone','loKcBgPreview']].forEach(([key,zoneId,prevId])=>{
         const zone=document.getElementById(zoneId), prev=document.getElementById(prevId);
         if(!zone||!prev) return;
         const bg=loBgSettings[key];
@@ -1653,6 +1719,7 @@ function loStopScan(){
     clearTimeout(loScanTimer);
     loScanStream?.getTracks()?.forEach(t=>t.stop());
     loScanStream=null;
+    loLastSpectateKey=null;
     if(window._loGrabVideo){ window._loGrabVideo.srcObject=null; }
     document.getElementById('loScanSetup').style.display='block';
     document.getElementById('loScanActive').style.display='none';
@@ -1684,7 +1751,7 @@ async function loScanLoop(){
         const thumb=document.getElementById('loScanThumbWrap');
         if(thumb) thumb.innerHTML=`<img src="${cv.toDataURL('image/jpeg',.7)}" style="width:100%;display:block">`;
 
-        await (loScanMode==='board' ? loDetectBoardState(cv) : loDetectKillEvent(cv));
+        await (loScanMode==='board' ? loDetectBoardState(cv) : loScanMode==='spectate' ? loDetectSpectateCard(cv) : loDetectKillEvent(cv));
     }catch(e){ loLog('⚠️ خطأ بالمسح: '+e.message); }
     loScanTimer=setTimeout(loScanLoop,loScanIntervalMs);
 }
@@ -1699,6 +1766,10 @@ function loSetScanMode(mode){
         if(hint) hint.textContent='يقرأ لوحة كل الفرق كاملة كل مسحة (اسم/رقم الفريق، كلاته، وحي/ميت كل لاعب)، ويزامن الجدول بالكامل مع الي طالع بالصورة — تلقائي التصحيح، ما يحتاج تتبّع أحداث.';
         if(pickerHint) pickerHint.textContent='اسحب المربع فوق لوحة/شاشة كل الفرق (اللي تبين كل فريق مع عدد كلاته وحالة لاعبيه)';
         if(undoBtn) undoBtn.style.display='';
+    } else if(mode==='spectate'){
+        if(hint) hint.textContent='يقرأ كارد وضع المشاهدة (اسم الفريق، اللاعب، الضرر، أطول مسافة إقصاء، الإسقاطات) ويحدّث "كارد القتلة" وحده أول ما يتغيّر اللاعب المعروض — بدون ما تدخل شي يدوي.';
+        if(pickerHint) pickerHint.textContent='اسحب المربع فوق كارد الإحصائيات اللي يطلع بوضع المشاهدة (اسم الفريق، الضرر، المسافة، الإسقاطات)';
+        if(undoBtn) undoBtn.style.display='none';
     } else {
         if(hint) hint.textContent='يراقب سطر "فلان قتل فلان" بالكيل فيد ويحدّث حالة اللاعب المحدد فقط (نوك/تفنيش) لحظة حدوثه.';
         if(pickerHint) pickerHint.textContent='اسحب المربع وحجّمه فوق منطقة أسماء اللاعبين بالكيل فيد';
@@ -1786,7 +1857,56 @@ function loIsDuplicateEvent(key){
 }
 function loMarkEventSeen(key){ loSeenEvents.push({key,ts:Date.now()}); }
 
-/* ════ وضع "لوحة كل الفرق" — يقرأ الحالة الكاملة كل مسحة ويزامن الجدول معها (مو أحداث منفصلة) ════ */
+let loLastSpectateKey=null; /* آخر لاعب تم رصده بكارد المشاهدة — نمنع تكرار نفس الكارد وهو لسا ظاهر */
+
+/* ════ وضع "كارد المشاهدة" — يقرأ كارد إحصائيات وضع Spectate ويحدّث كارد القتلة تلقائياً ════ */
+async function loDetectSpectateCard(canvas){
+    if(loTeams.length<1){ loLog('⚠️ أضف الفرق أولاً ليعمل الرصد'); loScanActive=false; return; }
+
+    const teamsInfo = loTeams.map(t=>`- "${t.name}" (${t.abbr||''})`).join('\n');
+    const b64=canvas.toDataURL('image/jpeg',.8).split(',')[1];
+    try{
+        const resp=await fetch('https://api.anthropic.com/v1/messages',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+                model:'claude-sonnet-4-20250514',
+                max_tokens:300,
+                messages:[{role:'user',content:[
+                    {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
+                    {type:'text',text:`هذه قصاصة من كارد إحصائيات وضع "المشاهدة" (Spectate) بلعبة باتل رويال — يبين اسم الفريق، اسم اللاعب، الضرر (Damage Dealt)، أطول مسافة إقصاء (Longest Elim Distance)، وعدد الإسقاطات الملتقطة (Airdrop Looted).
+الفرق المسجلة بالنظام: ${teamsInfo}
+
+طابق اسم الفريق الظاهر بالصورة مع فريق من القائمة أعلاه إذا أمكن، واستخرج القيم الظاهرة. أعد JSON فقط بهذا الشكل:
+{"team":"اسم الفريق كما بالقائمة أعلاه أو كما يظهر بالصورة إذا ما طابق شي","player":"اسم اللاعب","damage":177,"distance":203,"airdrops":0}
+إذا أي قيمة مو واضحة بالصورة خليها null. إذا ماكو كارد واضح بالصورة أصلاً، أعد {"team":null}. لا تكتب أي نص إضافي غير الـ JSON.`}
+                ]}]
+            })
+        });
+        const data=await resp.json();
+        const txt=data.content?.[0]?.text||'{"team":null}';
+        let parsed={team:null};
+        try{ parsed=JSON.parse(txt.replace(/```json?|```/g,'').trim()); }catch(_){}
+        if(!parsed.team) return;
+
+        /* منع تكرار نفس الكارد وهو لسا ظاهر بالشاشة (يبقى العنوان نفسه لعدة ثواني عادة) */
+        const key=`${parsed.team}|${parsed.player||''}`.toLowerCase();
+        if(key===loLastSpectateKey) return;
+        loLastSpectateKey=key;
+
+        const matched=loTeams.find(t=>
+            t.name.toLowerCase()===String(parsed.team).toLowerCase() ||
+            (t.abbr&&t.abbr.toLowerCase()===String(parsed.team).toLowerCase())
+        );
+        /* إذا ما طابقنا فريق مسجّل، نسوي كارد مؤقت بنفس الاسم الظاهر بالصورة بدون شعار/لون */
+        const teamForCard = matched || {id:-1,name:parsed.team,abbr:'',logo:null,flag:'none',color:'#888'};
+
+        loLog(`📊 رُصد كارد مشاهدة: ${parsed.team}${parsed.player?' — '+parsed.player:''}`);
+        loAnnounceKillCard(teamForCard, parsed.player||'', parsed.damage??null, parsed.distance??null, parsed.airdrops??null);
+    }catch(e){ loLog('⚠️ تعذّر تحليل كارد المشاهدة'); }
+}
+
+
 async function loDetectBoardState(canvas){
     if(loTeams.length<2){ loLog('⚠️ أضف الفرق أولاً ليعمل الرصد'); loScanActive=false; return; }
 
