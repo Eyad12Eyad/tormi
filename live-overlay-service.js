@@ -1498,10 +1498,9 @@ function loTestElimBanner(){
     const testTeam={id:-1,name:'فريق تجريبي',abbr:'TST',logo:null,flag:'none',color:'#ff4444',kills:7,place:5};
     try{
         loBc?.postMessage({type:'TEAM_ELIMINATED',team:testTeam});
-        loToast('🔔 تم إرسال إشعار تجريبي — تأكد أن نافذة الأوفرلي مفتوحة لرؤيته','info');
-    }catch(e){
-        loToast('❌ افتح نافذة الأوفرلي (زر OBS) أولاً','warn');
-    }
+    }catch(_){}
+    loFirebasePushEvent('TEAM_ELIMINATED', {team:testTeam});
+    loToast('🔔 تم إرسال إشعار تجريبي — تأكد أن نافذة/جهاز الأوفرلي مفتوح لرؤيته','info');
 }
 
 /* ════ إعدادات عرض الفرق المتبقية الدوّار (Spotlight) ════ */
