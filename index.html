@@ -35,6 +35,7 @@ html, body {
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
     import { getDatabase, ref, set, onValue, push, query, orderByChild, startAt, onChildAdded } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
+    import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyDoB4GcBTfJjeoWXFXk-80xe1p0I9whRY0",
@@ -49,7 +50,8 @@ html, body {
     try{
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
-        window.loFirebase = { db, ref, set, onValue, push, query, orderByChild, startAt, onChildAdded };
+        const storage = getStorage(app);
+        window.loFirebase = { db, ref, set, onValue, push, query, orderByChild, startAt, onChildAdded, storage, sRef, uploadBytes, getDownloadURL };
     }catch(e){
         console.warn('[Firebase] تعذر التهيئة — الأداة تشتغل محلياً بس بدون مزامنة بين الأجهزة:', e);
     }
