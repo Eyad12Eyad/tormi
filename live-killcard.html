@@ -12,7 +12,7 @@
 * { margin:0; padding:0; box-sizing:border-box; }
 html,body { background:transparent; font-family:'Rajdhani','Segoe UI',Arial,sans-serif; width:100%; height:100%; overflow:hidden; }
 
-/* ════ كارد قتلة مفردة — بستايل شاشة اللعبة الأصلية (شعار + اسم + ضرر + مسافة + إسقاطات) ════ */
+/* ════ كارد قتلة مفردة — تصميم: شعار فريق القاتل + مختصره | KILL/KNOCK xN | شعار الفريق المقتول منه + مختصره ════ */
 .kill-card{
     position:fixed;
     bottom:26px; left:26px;
@@ -34,34 +34,29 @@ html,body { background:transparent; font-family:'Rajdhani','Segoe UI',Arial,sans
 .kc-bg-layer::after{ content:''; position:absolute; inset:0; background:linear-gradient(90deg, rgba(4,6,10,.55), rgba(4,6,10,.75)); }
 .kc-content{ position:relative; z-index:1; display:flex; align-items:stretch; }
 
-.kc-logo-wrap{
-    position:relative; width:56px; flex-shrink:0;
-    display:flex; align-items:center; justify-content:center;
+/* صندوق فريق (شعار + مختصر) — يُستخدم لصندوق القاتل (يسار) وصندوق المقتول منه (يمين) */
+.kc-side{
+    position:relative; flex-shrink:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:3px; padding:8px 14px; min-width:66px;
     background:rgba(0,0,0,.35);
-    border-right:3px solid;
 }
-.kc-logo-img{ width:38px; height:38px; border-radius:8px; object-fit:cover; }
-.kc-logo-fallback{ font-family:'Teko',sans-serif; font-weight:700; font-size:1.4rem; }
+.kc-side.kc-killer{ border-right:3px solid; }
+.kc-side.kc-victim{ border-left:3px solid; }
+.kc-logo-img{ width:34px; height:34px; border-radius:8px; object-fit:cover; }
+.kc-logo-fallback{ font-family:'Teko',sans-serif; font-weight:700; font-size:1.3rem; }
 .kc-flag{ position:absolute; bottom:3px; right:3px; width:16px; height:12px; object-fit:cover; border-radius:2px; box-shadow:0 0 0 1px rgba(255,255,255,.4); }
-.kc-info{
-    display:flex; flex-direction:column; justify-content:center; gap:2px;
-    padding:8px 14px; min-width:130px;
+.kc-side-abbr{ color:#fff; font-weight:800; font-size:.72rem; letter-spacing:.03em; white-space:nowrap; }
+
+/* المنتصف — KILL / KNOCK + العدد */
+.kc-mid{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:1px; padding:6px 18px; min-width:90px;
     background:linear-gradient(90deg, rgba(20,26,40,.75), rgba(10,13,20,.65));
 }
-.kc-team{ color:#fff; font-weight:800; font-size:.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px; }
-.kc-killer-line{ color:#ffcf4d; font-weight:700; font-size:.68rem; letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px; margin-bottom:1px; }
-.kc-player{ color:#9aa8bb; font-size:.7rem; font-weight:600; letter-spacing:.03em; }
-.kc-stats{ display:flex; }
-.kc-stat{
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    padding:6px 14px;
-    background:rgba(120,20,20,.5);
-    border-right:1px solid rgba(255,255,255,.08);
-    min-width:72px;
-}
-.kc-stat:last-child{ border-right:none; }
-.kc-stat-label{ font-size:.52rem; color:rgba(255,255,255,.65); letter-spacing:.05em; font-weight:700; margin-bottom:2px; white-space:nowrap; }
-.kc-stat-val{ font-family:'Teko',sans-serif; font-weight:700; font-size:1.25rem; color:#fff; line-height:1; }
+.kc-action{ font-family:'Teko',sans-serif; font-weight:700; font-size:1.4rem; letter-spacing:.12em; line-height:1; color:#ff5252; }
+.kc-action.knock{ color:#ffcf4d; }
+.kc-count{ color:#9aa8bb; font-size:.72rem; font-weight:700; letter-spacing:.04em; }
 </style>
 </head>
 <body>
@@ -223,38 +218,39 @@ function processKillCardQueue(){
         /* الخلفية تُطبَّق/تُحدَّث دون لمس المحتوى — تبقى ثابتة (يشتغل الفيديو بسلاسة) */
         setKcBgLayer(card, currentSettings?.bg?.killCardBg);
 
-        const t = ev.team;
-        const logoHtml = t.logo
-            ? `<img class="kc-logo-img" src="${t.logo}">`
-            : `<div class="kc-logo-fallback" style="color:${t.color||'#fff'}">${(t.abbr||t.name||'?').slice(0,2).toUpperCase()}</div>`;
-        const hasFlag = t.flag && t.flag!=='none';
-        const flagHtml = hasFlag ? `<img class="kc-flag" src="https://flagcdn.com/w40/${t.flag}.png" alt="">` : '';
+        const victim = ev.team;
+        const killer = ev.killer || null;
+
+        function sideLogo(team){
+            return team?.logo
+                ? `<img class="kc-logo-img" src="${team.logo}">`
+                : `<div class="kc-logo-fallback" style="color:${team?.color||'#fff'}">${(team?.abbr||team?.name||'?').slice(0,2).toUpperCase()}</div>`;
+        }
+        function sideFlag(team){
+            return (team?.flag && team.flag!=='none')
+                ? `<img class="kc-flag" src="https://flagcdn.com/w40/${team.flag}.png" alt="">`
+                : '';
+        }
+        function sideAbbr(team){
+            return (team?.abbr || team?.name || '').toString().toUpperCase();
+        }
 
         const content = card.querySelector('.kc-content');
-        const actionVerb = ev.mode==='knock' ? 'نوك' : 'قتل';
-        const killerLine = ev.killer
-            ? `<div class="kc-killer-line">${ev.killer.name} ${actionVerb} ${ev.count||1} من ${t.name}</div>`
-            : '';
+        const isKnock = ev.mode==='knock';
+        const actionLabel = isKnock ? 'KNOCK' : 'KILL';
+
         content.innerHTML = `
-            <div class="kc-logo-wrap" style="border-color:${t.color||'rgba(255,255,255,.2)'}">${logoHtml}${flagHtml}</div>
-            <div class="kc-info">
-                ${killerLine}
-                <div class="kc-team">${t.name}</div>
-                ${ev.player ? `<div class="kc-player">${ev.player}</div>` : ''}
+            <div class="kc-side kc-killer" style="border-color:${killer?.color||'rgba(255,255,255,.2)'}">
+                ${sideLogo(killer)}${sideFlag(killer)}
+                <div class="kc-side-abbr">${sideAbbr(killer)}</div>
             </div>
-            <div class="kc-stats">
-                <div class="kc-stat">
-                    <div class="kc-stat-label">DAMAGE DEALT</div>
-                    <div class="kc-stat-val">${ev.damage!=null ? String(ev.damage).padStart(4,'0') : '----'}</div>
-                </div>
-                <div class="kc-stat">
-                    <div class="kc-stat-label">LONGEST ELIM DIS.</div>
-                    <div class="kc-stat-val">${ev.distance!=null ? ev.distance+'M' : '----'}</div>
-                </div>
-                <div class="kc-stat">
-                    <div class="kc-stat-label">AIRDROP LOOTED</div>
-                    <div class="kc-stat-val">${ev.airdrops!=null ? String(ev.airdrops).padStart(2,'0') : '--'}</div>
-                </div>
+            <div class="kc-mid">
+                <div class="kc-action${isKnock?' knock':''}">${actionLabel}</div>
+                <div class="kc-count">x${ev.count||1}</div>
+            </div>
+            <div class="kc-side kc-victim" style="border-color:${victim?.color||'rgba(255,255,255,.2)'}">
+                ${sideLogo(victim)}${sideFlag(victim)}
+                <div class="kc-side-abbr">${sideAbbr(victim)}</div>
             </div>`;
 
         requestAnimationFrame(()=> card.classList.add('show'));
