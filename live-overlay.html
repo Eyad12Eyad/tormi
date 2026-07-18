@@ -533,7 +533,7 @@ async function processElimQueue(){
             : `<span class="flag-fallback">${team.flag||'🏳️'}</span>`;
 
         content.innerHTML = `
-            <div class="elim-banner-top"><span>تم الإقصاء</span></div>
+            <div class="elim-banner-top"><span>تم الإقصاء${team.reason ? ' ل'+team.reason : ''}</span></div>
             <div class="elim-banner-body">
                 <div class="elim-logo-wrap" style="border-color:${team.color||'rgba(255,255,255,.15)'}">${logoHtml}</div>
                 <div class="elim-info">
