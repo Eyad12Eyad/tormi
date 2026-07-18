@@ -379,6 +379,32 @@ html,body { background:transparent; font-family:'Rajdhani','Segoe UI',Arial,sans
     </div>
 </div>
 
+<!-- Firebase — استقبال تحديثات من جهاز ثاني (كسور الثانية). لو فشل التحميل، الأوفرلي يشتغل
+     محلياً بس عبر BroadcastChannel عادي بدون أي كسر بالوظائف. -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+    import { getDatabase, ref, onValue, query, orderByChild, startAt, onChildAdded } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyDoB4GcBTfJjeoWXFXk-80xe1p0I9whRY0",
+        authDomain: "pubg-overlay.firebaseapp.com",
+        databaseURL: "https://pubg-overlay-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "pubg-overlay",
+        storageBucket: "pubg-overlay.firebasestorage.app",
+        messagingSenderId: "71044068816",
+        appId: "1:71044068816:web:e0cfcb64bfa51e58c475d5"
+    };
+
+    try{
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        window.loFirebase = { db, ref, onValue, query, orderByChild, startAt, onChildAdded };
+    }catch(e){
+        console.warn('[Firebase] تعذر التهيئة — الأوفرلي يشتغل محلياً بس:', e);
+    }
+    window.dispatchEvent(new Event('lo-firebase-ready'));
+</script>
+
 <script>
 const KEY = 'pubg_live_eyad12';
 const CH  = 'pubg-live-eyad12';
@@ -408,7 +434,7 @@ async function loIdbGet(key){
     });
 }
 
-/* ── BroadcastChannel ── */
+/* ── BroadcastChannel (نفس الجهاز — فوري ومجاني) ── */
 try {
     bc = new BroadcastChannel(CH);
     bc.onmessage = e => {
@@ -416,6 +442,29 @@ try {
         if (e.data?.type === 'TEAM_ELIMINATED') showElimBanner(e.data.team);
     };
 } catch(_) {}
+
+/* ── Firebase (جهاز ثاني — عبر الإنترنت) ── */
+const LO_FB_ROOM='default';
+const _fbPageLoadTs = Date.now();
+function loSetupFirebaseListeners(){
+    if(!window.loFirebase) return;
+    const {db,ref,onValue,query,orderByChild,startAt,onChildAdded} = window.loFirebase;
+    try{
+        onValue(ref(db,`rooms/${LO_FB_ROOM}/state`), snap=>{
+            const val=snap.val(); if(!val) return;
+            currentSettings = val.settings||{};
+            applySettings();
+            render(val.teams||[]);
+        });
+        const evQuery = query(ref(db,`rooms/${LO_FB_ROOM}/events`), orderByChild('ts'), startAt(_fbPageLoadTs));
+        onChildAdded(evQuery, snap=>{
+            const ev=snap.val(); if(!ev) return;
+            if(ev.type==='TEAM_ELIMINATED') showElimBanner(ev.team);
+        });
+    }catch(e){ console.warn('[Firebase] فشل ربط المستمعين:', e); }
+}
+if(window.loFirebase) loSetupFirebaseListeners();
+else window.addEventListener('lo-firebase-ready', loSetupFirebaseListeners);
 
 /* ════ بانر إعلان الإقصاء ════ */
 let _elimQueue = [];
