@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>لوحة تحكم أوفرلي PUBG — Eyad_Eyad12</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* هذا الملف صار مستقل بالكامل — يشغّل لوحة التحكم (live-overlay-service.js) لحاله
+   بدون أي حاجة لموقعك أو أي صفحة ثانية. افتحه مباشرة بأي متصفح وخلص. */
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body {
+    background:#030612;
+    min-height:100vh;
+    font-family:'Rajdhani','Segoe UI',Tahoma,Arial,sans-serif;
+    color:#fff;
+}
+#loRoot { width:100%; min-height:100vh; }
+/* الحاوية الأصلية مصممة لتكون داخل مودال — هنا نخليها تاخذ الشاشة كاملة براحة */
+.service-interface { padding:0; max-width:1100px; margin:0 auto; min-height:100vh; }
+</style>
+</head>
+<body>
+
+<div id="loRoot">
+    <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;color:#556677;font-size:.9rem">
+        <i class="fas fa-spinner fa-spin" style="margin-left:8px"></i> جاري التحميل...
+    </div>
+</div>
+
+<!-- الملف الأساسي بكل منطق اللوحة — لازم يكون بنفس المجلد -->
+<script src="live-overlay-service.js"></script>
+<script>
+    /* live-overlay-service.js مصمم أصلاً ليندمج بموقع فيه نظام مودالات (openService)،
+       هنا نتجاوز هذا كلياً ونبني الواجهة مباشرة بالصفحة نفسها بدون أي حاجة خارجية */
+    document.getElementById('loRoot').innerHTML = loHTML();
+    requestAnimationFrame(loInit);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="UTF-8">
+<title>PUBG Live Overlay — Eyad_Eyad12</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Teko:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { background:transparent; font-family:'Rajdhani','Segoe UI',Arial,sans-serif; }
+
+/* ════ خلفية الشريطين (صورة/فيديو) — عقدة ثابتة لا تُعاد بناؤها أبداً ════ */
+.sb-bg-layer { position:absolute; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
+.sb-bg-layer img, .sb-bg-layer video { width:100%; height:100%; object-fit:cover; }
+.sb-bg-layer::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg,rgba(0,0,0,.45),rgba(0,0,0,.65)); }
+
+/* ════ SCOREBOARD CONTAINER ════ */
+.sb {
+    position:fixed;
+    top:22px; right:22px;
+    width:440px;
+    background:linear-gradient(165deg,rgba(6,10,20,0.95),rgba(3,5,11,0.97));
+    border-radius:10px;
+    overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,180,60,0.12), 0 0 40px rgba(255,140,0,0.06);
+    backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px);
+    border:1px solid rgba(255,255,255,0.06);
+}
+
+/* ════ Ambient light sweep ════ */
+.sb::before{
+    content:'';
+    position:absolute; top:0; left:-60%;
+    width:40%; height:100%;
+    background:linear-gradient(100deg,transparent,rgba(255,255,255,.05),transparent);
+    animation:sweep 6s ease-in-out infinite;
+    pointer-events:none; z-index:5;
+}
+@keyframes sweep{ 0%{left:-60%} 50%{left:120%} 100%{left:120%} }
+
+/* ════ HEADER ════ */
+.sb-hdr {
+    position:relative;
+    background:linear-gradient(120deg,#1a0f00 0%,#2b1400 40%,#4a1e00 100%);
+    padding:0;
+    overflow:hidden;
+    border-bottom:1px solid rgba(255,150,30,0.35);
+}
+.sb-hdr-top{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:9px 13px 6px;
+    position:relative; z-index:1;
+}
+.sb-brand{ display:flex; align-items:center; gap:7px; }
+.sb-brand-mark{
+    width:20px; height:20px; border-radius:5px;
+    background:linear-gradient(140deg,#ffb733,#ff7a00);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Teko',sans-serif; font-weight:700; font-size:14px; color:#1a0f00;
+    box-shadow:0 0 10px rgba(255,140,0,.5);
+}
+.sb-brand-title{
+    font-family:'Teko',sans-serif; font-weight:600; font-size:16px;
+    letter-spacing:1.5px; color:#ffd9a0; text-transform:uppercase;
+}
+.sb-live{
+    display:flex; align-items:center; gap:5px;
+    background:rgba(255,50,50,.15); border:1px solid rgba(255,70,70,.45);
+    padding:3px 9px 3px 7px; border-radius:20px;
+}
+.sb-live-dot{ width:6px; height:6px; border-radius:50%; background:#ff3b3b; animation:livePulse 1.3s ease-in-out infinite; }
+@keyframes livePulse{ 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(255,59,59,.6)} 50%{opacity:.6;box-shadow:0 0 0 4px rgba(255,59,59,0)} }
+.sb-live span{ font-family:'Teko',sans-serif; font-size:12px; font-weight:600; letter-spacing:1px; color:#ff9a9a; text-transform:uppercase; }
+
+.sb-hdr-cols {
+    position:relative; z-index:1;
+    display:grid;
+    grid-template-columns:var(--grid-cols,42px 1fr 74px 52px 56px);
+    padding:5px 13px 8px;
+    font-family:'Teko',sans-serif;
+    font-size:11.5px;
+    font-weight:600;
+    letter-spacing:1.6px;
+    text-transform:uppercase;
+    color:rgba(255,210,150,0.75);
+    align-items:center;
+}
+.sb-hdr-cols .h-team { text-align:left; padding-right:4px; }
+.sb-hdr-cols div { text-align:center; }
+
+/* ════ TEAM ROWS ════ */
+.sb-body { overflow:hidden; position:relative; }
+.sb-rows{ position:relative; z-index:1; }
+.t-row {
+    position:relative;
+    display:grid;
+    grid-template-columns:var(--grid-cols,42px 1fr 74px 52px 56px);
+    padding:7px 13px 6px;
+    align-items:center;
+    border-bottom:1px solid rgba(255,255,255,0.045);
+    transition:background .4s ease, opacity .4s ease, border-color .4s ease;
+}
+.t-row > * { position:relative; z-index:1; }
+.t-row::before{
+    content:''; position:absolute; top:0; bottom:0; right:0; width:3px;
+    background:var(--tc,#888); opacity:.85;
+}
+.t-row:nth-child(even) { background:rgba(255,255,255,0.028); }
+.t-row.all-alive {
+    background:linear-gradient(90deg,rgba(255,170,40,0.14),rgba(255,170,40,0.02));
+}
+.t-row.all-alive::before{ box-shadow:0 0 10px var(--tc,#ffaa28); }
+.t-row.elim-row { opacity:.42; filter:grayscale(.4); }
+
+/* Rank */
+.t-rank-wrap{ display:flex; align-items:center; justify-content:center; }
+.t-rank {
+    font-family:'Teko',sans-serif;
+    font-weight:700;
+    font-size:19px;
+    text-align:center;
+    color:#8a94a6;
+    line-height:1;
+}
+.t-row:nth-child(1) .t-rank-wrap{
+    width:24px; height:24px; border-radius:50%;
+    background:radial-gradient(circle,rgba(255,215,0,.25),transparent 70%);
+}
+.t-row:nth-child(1) .t-rank { color:#ffd700; text-shadow:0 0 12px rgba(255,215,0,0.65); font-size:20px; }
+.t-row:nth-child(2) .t-rank { color:#d8d8e0; text-shadow:0 0 8px rgba(200,200,220,.4); }
+.t-row:nth-child(3) .t-rank { color:#e0a565; text-shadow:0 0 8px rgba(205,127,50,.4); }
+
+/* Team info */
+.t-info {
+    display:flex;
+    align-items:center;
+    gap:6px;
+    overflow:hidden;
+}
+.t-logo { width:18px; height:18px; border-radius:5px; object-fit:cover; flex-shrink:0; box-shadow:0 0 0 1px rgba(255,255,255,.15); }
+.t-flag { font-size:14px; flex-shrink:0; line-height:1; }
+.t-logo-wrap { position:relative; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+.t-flag-badge { position:absolute; bottom:-3px; right:-4px; width:13px; height:9px; object-fit:cover; border-radius:2px; box-shadow:0 0 0 1px rgba(255,255,255,.4); background:#0a0e18; }
+.t-flag-solo { width:18px; height:13px; object-fit:cover; border-radius:3px; box-shadow:0 0 0 1px rgba(255,255,255,.2); }
+.t-color-dot {
+    width:7px; height:7px;
+    border-radius:50%;
+    flex-shrink:0;
+    box-shadow:0 0 6px currentColor;
+}
+.t-name {
+    font-weight:600;
+    font-size:13px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    transition:color .3s;
+    letter-spacing:.2px;
+}
+
+/* ════ PLAYER BARS ════ */
+.p-bars {
+    display:flex;
+    gap:3px;
+    align-items:center;
+    justify-content:center;
+}
+.pbar {
+    width:11px;
+    height:24px;
+    border-radius:3px;
+    transition:all .35s cubic-bezier(.34,1.2,.64,1);
+    position:relative;
+}
+.pbar.alive {
+    background:linear-gradient(180deg,#5cff7a,#1fae3f);
+    box-shadow:0 0 8px rgba(80,255,110,0.55), inset 0 1px 1px rgba(255,255,255,.3);
+}
+.pbar.knocked {
+    background:linear-gradient(180deg,#ff9a2e,#d85400);
+    box-shadow:0 0 8px rgba(255,140,20,0.55), inset 0 1px 1px rgba(255,255,255,.25);
+    animation:knockedPulse 1.4s ease-in-out infinite;
+}
+@keyframes knockedPulse{ 0%,100%{opacity:1} 50%{opacity:.68} }
+.pbar.eliminated {
+    background:rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.08);
+    box-shadow:none;
+}
+
+/* PTS & ELIMS */
+.t-pts {
+    text-align:center;
+    font-family:'Teko',sans-serif;
+    font-weight:700;
+    font-size:20px;
+    color:#fff;
+    letter-spacing:.5px;
+}
+.t-elims {
+    text-align:center;
+    display:flex; align-items:center; justify-content:center; gap:3px;
+    font-family:'Teko',sans-serif;
+    font-weight:600;
+    font-size:16px;
+    color:#ffb26b;
+}
+.t-elims::before{
+    content:''; width:9px; height:9px; flex-shrink:0;
+    background:linear-gradient(140deg,#ff9a2e,#c94a00);
+    clip-path:polygon(50% 0%,100% 38%,82% 100%,18% 100%,0% 38%);
+}
+
+/* ════ LEGEND ════ */
+.sb-legend {
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:16px;
+    padding:6px 10px;
+    background:rgba(0,0,0,0.5);
+    font-size:9px;
+    letter-spacing:1px;
+    font-weight:700;
+    color:rgba(255,255,255,0.55);
+    border-top:1px solid rgba(255,150,30,0.12);
+    position:relative; z-index:1;
+    text-transform:uppercase;
+}
+.lg-item { display:flex; align-items:center; gap:4px; }
+.lg-dot { width:9px; height:9px; border-radius:2px; }
+.lg-dot.alive  { background:linear-gradient(180deg,#5cff7a,#1fae3f); }
+.lg-dot.kd     { background:linear-gradient(180deg,#ff9a2e,#d85400); }
+.lg-dot.elim   { background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.15); }
+
+/* ════ EMPTY STATE ════ */
+.sb-empty {
+    padding:2.2rem 1.5rem;
+    text-align:center;
+    color:rgba(255,255,255,0.32);
+    font-size:.85rem;
+    line-height:1.8;
+    position:relative; z-index:1;
+}
+
+/* Row entrance/reorder */
+@keyframes rowHighlight {
+    0%   { background:rgba(255,190,60,0.28); }
+    100% { background:inherit; }
+}
+.row-changed { animation: rowHighlight .7s ease; }
+
+/* ════════════════════════════════════════════
+   بانر إعلان الإقصاء — يطلع لحظة موت فريق بالكامل
+════════════════════════════════════════════ */
+.elim-banner{
+    position:fixed;
+    left:var(--eb-x,50%); top:var(--eb-y,50%);
+    transform:translate(-50%,-50%) scale(calc(var(--eb-scale,1) * .85));
+    width:560px; max-width:92vw;
+    background:linear-gradient(160deg,rgba(10,4,4,0.97),rgba(20,4,4,0.98));
+    border:1.5px solid rgba(255,70,70,0.5);
+    border-radius:16px;
+    box-shadow:0 30px 90px rgba(0,0,0,.8), 0 0 60px rgba(255,40,40,.18);
+    padding:0; overflow:hidden;
+    z-index:99999;
+    opacity:0; pointer-events:none;
+    transition:opacity .4s ease, transform .4s cubic-bezier(.22,1.4,.36,1);
+}
+.elim-banner.show{ opacity:1; transform:translate(-50%,-50%) scale(var(--eb-scale,1)); }
+.elim-banner-content{ position:relative; z-index:1; }
+.elim-banner-top{
+    background:linear-gradient(120deg,#8a0000,#c40000 50%,#8a0000);
+    padding:8px 20px;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    position:relative; overflow:hidden;
+}
+.elim-banner-top::before{
+    content:''; position:absolute; inset:0;
+    background:repeating-linear-gradient(135deg,transparent,transparent 8px,rgba(255,255,255,.05) 8px,rgba(255,255,255,.05) 16px);
+    animation:banStripe 2s linear infinite;
+}
+@keyframes banStripe{ from{transform:translateX(0)} to{transform:translateX(46px)} }
+.elim-banner-top span{
+    position:relative; z-index:1;
+    font-family:'Teko',sans-serif; font-weight:700; font-size:22px;
+    letter-spacing:6px; color:#fff; text-transform:uppercase;
+    text-shadow:0 2px 8px rgba(0,0,0,.6);
+}
+.elim-banner-body{
+    display:flex; align-items:center; gap:18px;
+    padding:22px 26px;
+}
+.elim-logo-wrap{
+    width:74px; height:74px; border-radius:14px; flex-shrink:0;
+    background:linear-gradient(150deg,rgba(255,255,255,.08),rgba(255,255,255,.02));
+    border:1.5px solid rgba(255,255,255,.15);
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden;
+    box-shadow:0 8px 24px rgba(0,0,0,.4);
+}
+.elim-logo-wrap img{ width:100%; height:100%; object-fit:cover; }
+.elim-logo-wrap .flag-fallback{ font-size:36px; }
+.elim-info{ flex:1; min-width:0; }
+.elim-team-name{
+    font-family:'Teko',sans-serif; font-weight:700; font-size:30px;
+    color:#fff; letter-spacing:.5px; line-height:1.1;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    text-shadow:0 2px 10px rgba(0,0,0,.5);
+}
+.elim-team-abbr{
+    font-family:'Rajdhani',sans-serif; font-weight:600; font-size:13px;
+    color:rgba(255,150,150,.85); letter-spacing:2px; text-transform:uppercase;
+    margin-top:2px;
+}
+.elim-stats{ display:flex; gap:10px; margin-top:10px; }
+.elim-stat{
+    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1);
+    border-radius:9px; padding:6px 14px; text-align:center;
+}
+.elim-stat b{
+    display:block; font-family:'Teko',sans-serif; font-weight:700; font-size:22px;
+    color:#ff8888;
+}
+.elim-stat span{
+    font-size:9.5px; color:rgba(255,255,255,.5); letter-spacing:1.5px; text-transform:uppercase;
+}
+.elim-place-badge{
+    flex-shrink:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    width:78px; height:78px; border-radius:50%;
+    background:radial-gradient(circle,rgba(255,60,60,.18),transparent 70%);
+    border:2px solid rgba(255,80,80,.5);
+}
+.elim-place-badge b{
+    font-family:'Teko',sans-serif; font-weight:700; font-size:30px; color:#ff5555;
+    text-shadow:0 0 14px rgba(255,60,60,.6);
+    line-height:1;
+}
+.elim-place-badge span{
+    font-size:8px; color:rgba(255,255,255,.55); letter-spacing:1.5px; margin-top:2px;
+}
+
+/* اختفاء جدول الفرق مؤقتاً — بالتزامن مع ظهور نافذة الفرق المتبقية المنفصلة (live-spotlight.html) */
+#sb-rows.spotlight-hide{ opacity:0; pointer-events:none; transition:opacity .3s ease; }
+</style>
+</head>
+<body>
+
+<div class="sb" id="sb">
+    <div class="sb-hdr" id="sb-hdr">
+        <div class="sb-hdr-top">
+            <div class="sb-brand">
+                <div class="sb-brand-mark">E</div>
+                <div class="sb-brand-title" id="sbTitle">PUBG CHAMPIONSHIP</div>
+
+
+            </div>
+            <div class="sb-live"><div class="sb-live-dot"></div><span>Live</span></div>
+        </div>
+        <div class="sb-hdr-cols">
+            <div>#</div>
+            <div class="h-team">TEAM</div>
+            <div>ALIVE</div>
+            <div id="hdrPts">PTS</div>
+            <div id="hdrElims">ELIMS</div>
+        </div>
+    </div>
+    <div class="sb-body" id="sb-body">
+        <div class="sb-rows" id="sb-rows">
+            <div class="sb-empty">في انتظار البيانات...<br>افتح لوحة التحكم في الموقع</div>
+        </div>
+    </div>
+    <div class="sb-legend">
+        <div class="lg-item"><div class="lg-dot alive"></div><span>Alive</span></div>
+        <div class="lg-item"><div class="lg-dot kd"></div><span>Knocked</span></div>
+        <div class="lg-item"><div class="lg-dot elim"></div><span>Eliminated</span></div>
+    </div>
+</div>
+
+<script>
+const KEY = 'pubg_live_eyad12';
+const CH  = 'pubg-live-eyad12';
+let nameToggle = {};
+let prevData   = null;
+let currentSettings = {};
+let bc;
+
+/* ════ IndexedDB — قراءة الخلفيات (صور/فيديو) المخزّنة من لوحة التحكم ════
+   نفس القاعدة/المخزن المستخدمين بملف الخدمة، حتى تُقرأ نفس الملفات هنا */
+const LO_DB_NAME='lo_media_store', LO_DB_STORE='media';
+function loIdbOpen(){
+    return new Promise((resolve,reject)=>{
+        const req=indexedDB.open(LO_DB_NAME,1);
+        req.onupgradeneeded=()=>{ if(!req.result.objectStoreNames.contains(LO_DB_STORE)) req.result.createObjectStore(LO_DB_STORE); };
+        req.onsuccess=()=>resolve(req.result);
+        req.onerror=()=>reject(req.error);
+    });
+}
+async function loIdbGet(key){
+    const db=await loIdbOpen();
+    return new Promise((resolve,reject)=>{
+        const tx=db.transaction(LO_DB_STORE,'readonly');
+        const req=tx.objectStore(LO_DB_STORE).get(key);
+        req.onsuccess=()=>resolve(req.result||null);
+        req.onerror=()=>reject(req.error);
+    });
+}
+
+/* ── BroadcastChannel ── */
+try {
+    bc = new BroadcastChannel(CH);
+    bc.onmessage = e => {
+        if (e.data?.type === 'UPDATE') { currentSettings=e.data.settings||{}; applySettings(); render(e.data.teams); }
+        if (e.data?.type === 'TEAM_ELIMINATED') showElimBanner(e.data.team);
+    };
+} catch(_) {}
+
+/* ════ بانر إعلان الإقصاء ════ */
+let _elimQueue = [];
+let _elimShowing = false;
+
+function showElimBanner(team){
+    _elimQueue.push(team);
+    if(!_elimShowing) processElimQueue();
+}
+
+async function processElimQueue(){
+    const team = _elimQueue.shift();
+    if(!team){ _elimShowing=false; return; }
+    _elimShowing=true;
+
+    try{
+        let banner = document.getElementById('elimBanner');
+        if(!banner){
+            banner = document.createElement('div');
+            banner.id = 'elimBanner';
+            banner.className = 'elim-banner';
+            /* حاوية محتوى ثابتة الاسم — تُحدَّث لوحدها فتبقى طبقة الخلفية (sb-bg-layer) سليمة
+               ولا تُعاد أبداً، فيشتغل فيديو خلفية البانر بسلاسة بين كل إشعار وآخر */
+            const content = document.createElement('div');
+            content.className = 'elim-banner-content';
+            banner.appendChild(content);
+            document.body.appendChild(banner);
+        }
+
+        /* خلفية البانر: أولوية لخلفية خاصة بهذا الفريق تحديداً (إن وُجدت)، وإلا الخلفية العامة */
+        let teamBg = currentSettings?.teamElimBg?.[team.id];
+        if(teamBg===undefined){
+            try{ teamBg = await loIdbGet('elimBg_team_'+team.id); }catch(_){ teamBg=null; }
+        }
+        setBgLayer(banner, teamBg || currentSettings?.bg?.elimBannerBg);
+        applyElimBannerSettings(currentSettings.elimBanner);
+
+        const content = banner.querySelector('.elim-banner-content');
+        const logoHtml = team.logo
+            ? `<img src="${team.logo}">`
+            : `<span class="flag-fallback">${team.flag||'🏳️'}</span>`;
+
+        content.innerHTML = `
+            <div class="elim-banner-top"><span>تم الإقصاء</span></div>
+            <div class="elim-banner-body">
+                <div class="elim-logo-wrap" style="border-color:${team.color||'rgba(255,255,255,.15)'}">${logoHtml}</div>
+                <div class="elim-info">
+                    <div class="elim-team-name">${team.name}</div>
+                    <div class="elim-team-abbr">${team.abbr||''}</div>
+                    <div class="elim-stats">
+                        <div class="elim-stat"><b>${team.kills||0}</b><span>Kills</span></div>
+                    </div>
+                </div>
+                <div class="elim-place-badge">
+                    <b>#${team.place||'-'}</b>
+                    <span>Place</span>
+                </div>
+            </div>`;
+
+        requestAnimationFrame(()=> banner.classList.add('show'));
+
+        setTimeout(()=>{
+            banner.classList.remove('show');
+            setTimeout(processElimQueue, 450); /* بعد الاختفاء بالكامل، اعرض التالي بالطابور إن وُجد */
+        }, 4500);
+    }catch(e){
+        /* أي خطأ غير متوقع لا يجب أن يوقف كل الإشعارات القادمة نهائياً */
+        console.error('[elimBanner] خطأ أثناء عرض إشعار الإقصاء:', e);
+        _elimShowing = false;
+        processElimQueue();
+    }
+}
+
+/* ── Name toggle every 2 s ── */
+setInterval(() => {
+    const data = load();
+    if (!data?.teams?.length) return;
+    data.teams.forEach(t => { nameToggle[t.id] = !nameToggle[t.id]; });
+    render(data.teams);
+}, 2000);
+
+/* ── Poll localStorage ── */
+setInterval(() => {
+    const data = load();
+    const sig  = JSON.stringify(data);
+    if (sig !== prevData) { prevData = sig; if (data?.teams?.length) render(data.teams); }
+}, 400);
+
+function load() {
+    try { return JSON.parse(localStorage.getItem(KEY)); } catch(_) { return null; }
+}
+
+function totalPts(t) { return (t.kills || 0) + (t.placementPts || 0); }
+
+/* تطبيق إعدادات الخلفية وإخفاء الأعمدة وعنوان البطولة */
+function applySettings(){
+    const cv = currentSettings.colVis || {};
+    const bg = currentSettings.bg || {};
+
+    if(currentSettings.title){
+        const t=document.getElementById('sbTitle');
+        if(t) t.textContent=currentSettings.title.toUpperCase();
+    }
+
+    /* أعمدة PTS/ELIMS */
+    document.getElementById('hdrPts').style.display   = cv.total===0 ? 'none':'';
+    document.getElementById('hdrElims').style.display = cv.kills===0 ? 'none':'';
+    let cols = ['42px','1fr','74px'];
+    cols.push(cv.total===0?'0px':'52px');
+    cols.push(cv.kills===0?'0px':'56px');
+    document.documentElement.style.setProperty('--grid-cols', cols.join(' '));
+
+    /* خلفية الشريط العلوي (الهيدر) والشريط الثاني (الجدول)
+       عقدة ثابتة — لا تُلمس أبداً أثناء إعادة رسم الصفوف، فيشتغل الفيديو بسلاسة */
+    setBgLayer('sb-hdr', bg.headerBg);
+    setBgLayer('sb-body', bg.bodyBg);
+
+    /* مكان وحجم بانر إشعار الإقصاء */
+    applyElimBannerSettings(currentSettings.elimBanner);
+}
+
+/* مكان بانر الإقصاء أصبح حر بالكامل (نقطة x%,y% محفوظة من لوحة التحكم عبر السحب) */
+function applyElimBannerSettings(cfg){
+    const root = document.documentElement.style;
+    root.setProperty('--eb-x', (cfg?.xPct ?? 50) + '%');
+    root.setProperty('--eb-y', (cfg?.yPct ?? 50) + '%');
+    root.setProperty('--eb-scale', cfg?.scale || 1);
+}
+
+function setBgLayer(container, bgData){
+    if(typeof container === 'string') container=document.getElementById(container);
+    if(!container) return;
+    let layer=container.querySelector('.sb-bg-layer');
+
+    if(!bgData){
+        if(layer) layer.remove();
+        return;
+    }
+
+    /* إنشاء العقدة مرة وحدة فقط، ولا نلمسها بعدها إطلاقاً إلا لو تغيّر المصدر فعلياً */
+    if(!layer){
+        layer=document.createElement('div');
+        layer.className='sb-bg-layer';
+        container.insertBefore(layer, container.firstChild);
+    }
+    if(layer.dataset.src===bgData.data) return; /* نفس الملف — لا تعيد الإنشاء */
+    layer.dataset.src=bgData.data;
+
+    if(bgData.type==='video'){
+        const v=document.createElement('video');
+        v.src=bgData.data; v.muted=true; v.autoplay=true; v.loop=true; v.playsInline=true;
+        layer.innerHTML=''; layer.appendChild(v);
+        v.play().catch(()=>{});
+    } else {
+        const img=document.createElement('img');
+        img.src=bgData.data;
+        layer.innerHTML=''; layer.appendChild(img);
+    }
+}
+
+function render(teams) {
+    /* نستهدف عقدة الصفوف فقط — طبقة الخلفية (بما فيها الفيديو) تبقى ثابتة تماماً ولا تُعاد أبداً */
+    const rowsEl = document.getElementById('sb-rows');
+    if (!teams?.length) { rowsEl.innerHTML = '<div class="sb-empty">لا توجد فرق</div>'; return; }
+
+    const sorted = [...teams].sort((a, b) => totalPts(b) - totalPts(a));
+
+    rowsEl.innerHTML = sorted.map((t, i) => {
+        const pts      = totalPts(t);
+        const players  = (t.players||[]).map(p=> typeof p==='string' ? {name:'',status:p} : p);
+        const allAlive = players.every(p => p.status === 'alive');
+        const allElim  = players.every(p => p.status === 'eliminated');
+        const name     = nameToggle[t.id] ? (t.abbr || t.name.slice(0,4).toUpperCase()) : t.name;
+        const bars     = players.map(p => `<div class="pbar ${p.status}" title="${p.name||''}"></div>`).join('');
+        /* العلم يُعرض كصورة حقيقية (flagcdn) لا كإيموجي — إيموجي الأعلام المركّبة تنكسر على ويندوز/OBS (CEF)
+           وتطلع كنص حروف الدولة بدل الصورة الملونة. t.flag يخزّن كود الدولة (مثل 'iq'، 'sa') أو 'none' */
+        const hasFlag = t.flag && t.flag!=='none';
+        const flagBadge = hasFlag ? `<img class="t-flag-badge" src="https://flagcdn.com/w40/${t.flag}.png" alt="">` : '';
+        const logoOrFlag = t.logo
+            ? `<span class="t-logo-wrap"><img class="t-logo" src="${t.logo}">${flagBadge}</span>`
+            : (hasFlag
+                ? `<span class="t-logo-wrap"><img class="t-flag-solo" src="https://flagcdn.com/w40/${t.flag}.png" alt=""></span>`
+                : `<span class="t-logo-wrap"><span class="t-flag">🏳️</span></span>`);
+
+        return `
+        <div class="t-row ${allAlive ? 'all-alive' : ''} ${allElim ? 'elim-row' : ''}" data-id="${t.id}" style="--tc:${t.color||'#888'}">
+            <div class="t-rank-wrap"><div class="t-rank">${i + 1}</div></div>
+            <div class="t-info">
+                ${logoOrFlag}
+                <div class="t-color-dot" style="background:${t.color || '#aaa'};color:${t.color || '#aaa'}"></div>
+                <div class="t-name" style="color:${allAlive ? '#fff' : (allElim ? '#666' : '#e2e2e2')}">${name}</div>
+            </div>
+            <div class="p-bars">${bars}</div>
+            <div class="t-pts">${pts}</div>
+            <div class="t-elims">${t.kills || 0}</div>
+        </div>`;
+    }).join('');
+
+    checkSpotlightTrigger(teams);
+}
+
+/* ════════════════════════════════════════════════
+   عرض الفرق المتبقية الدوّار — التصميم الفعلي انتقل لملف مستقل
+   (live-spotlight.html) يُضاف كمصدر منفصل شفاف بالكامل بـ OBS.
+   هنا فقط نُزامن اختفاء/ظهور جدول الفرق بنفس توقيت ذاك الملف بالضبط،
+   بالاعتماد على نفس بيانات الفرق ونفس شروط التفعيل، حتى ما يتعارضون.
+════════════════════════════════════════════════ */
+let _spotlightActive = false;
+let _spotlightSeen = false;
+let _spotlightLastCount = null;
+
+function getRemainingTeams(teams){
+    return teams.filter(t=>{
+        const players = (t.players||[]).map(p=> typeof p==='string' ? {status:p} : p);
+        return !players.every(p=>p.status==='eliminated');
+    });
+}
+
+function checkSpotlightTrigger(teams){
+    const cfg = currentSettings?.spotlight || {};
+    if(cfg.enabled===false) return; /* مُعطّل من الإعدادات */
+    const triggerCount = cfg.triggerCount || 5;
+    const cycles = Math.max(1, cfg.cycles || 3);
+    const showMs = cfg.cardMs || 4500;
+    const gapMs  = cfg.gapMs  || 700;
+
+    const remaining = getRemainingTeams(teams);
+    const count = remaining.length;
+
+    /* إعادة ضبط عند بدء جولة/ماتش جديد (العدد ارتفع فوق حد التفعيل مرة أخرى) */
+    if(_spotlightLastCount!==null && count>_spotlightLastCount && count>triggerCount){
+        _spotlightSeen=false;
+    }
+    _spotlightLastCount = count;
+
+    if(count>0 && count<=triggerCount && !_spotlightSeen && !_spotlightActive){
+        _spotlightSeen = true;
+        runRowsHideSequence(cycles, showMs, gapMs);
+    }
+}
+
+function runRowsHideSequence(cycles, showMs, gapMs){
+    _spotlightActive = true;
+    const rows = document.getElementById('sb-rows');
+    let cycle = 0;
+    (function runCycle(){
+        if(cycle>=cycles){ _spotlightActive=false; rows?.classList.remove('spotlight-hide'); return; }
+        rows?.classList.add('spotlight-hide');
+        setTimeout(()=>{
+            rows?.classList.remove('spotlight-hide');
+            cycle++;
+            setTimeout(runCycle, gapMs);
+        }, showMs);
+    })();
+}
+
+/* Initial load */
+try{ currentSettings=JSON.parse(localStorage.getItem('lo_overlay_settings')||'{}'); applySettings(); }catch(_){}
+const init = load();
+if (init?.teams?.length) render(init.teams);
+
+/* الخلفيات (صور/فيديو) صارت تُخزَّن بـ IndexedDB وليس localStorage (يتحمل ملفات أكبر بكثير)،
+   لذا نحمّلها هنا بشكل غير متزامن كي تظهر حتى قبل وصول أول بث مباشر من لوحة التحكم */
+(async()=>{
+    try{
+        if(!currentSettings.bg) currentSettings.bg={};
+        const keys=['headerBg','bodyBg','elimBannerBg'];
+        for(const k of keys){
+            const v=await loIdbGet(k);
+            if(v) currentSettings.bg[k]=v;
+        }
+        applySettings();
+    }catch(e){ console.warn('[init] تعذر تحميل الخلفيات من IndexedDB:', e); }
+})();
+</script>
+</body>
+</html>

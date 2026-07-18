@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="UTF-8">
+<title>PUBG Spotlight — Eyad_Eyad12</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Teko:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ملف مستقل بالكامل — يُضاف كمصدر منفصل بـ OBS (Browser Source) بجانب نافذة الفرق الرئيسية.
+   شفاف بالكامل ولا يعرض أي شيء إطلاقاً إلى أن يوصل عدد الفرق الحية للحد المحدد بالإعدادات،
+   فيظهر شريط الفرق المتبقية تلقائياً، ثم يختفي وحاله شفاف مرة ثانية. */
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { background:transparent; font-family:'Rajdhani','Segoe UI',Arial,sans-serif; width:100%; height:100%; overflow:hidden; }
+
+.spotlight-overlay{
+    position:fixed; inset:0; z-index:1;
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none;
+    transition:opacity .45s ease;
+}
+.spotlight-overlay.show{ opacity:1; }
+.spotlight-strip{
+    display:flex; flex-wrap:wrap; align-items:stretch; justify-content:center;
+    gap:14px; max-width:96vw;
+    transform:scale(.92) translateY(10px);
+    transition:transform .45s cubic-bezier(.22,1.4,.36,1);
+}
+.spotlight-overlay.show .spotlight-strip{ transform:scale(1) translateY(0); }
+.spotlight-sq{
+    width:148px;
+    background:linear-gradient(165deg, rgba(8,10,16,.97), rgba(4,6,12,.98));
+    border:1.5px solid rgba(0,229,255,.3);
+    border-radius:14px;
+    padding:14px 10px 16px;
+    box-shadow:0 18px 46px rgba(0,0,0,.7), 0 0 30px rgba(0,229,255,.08);
+    display:flex; flex-direction:column; align-items:center;
+    text-align:center;
+}
+.spotlight-sq-rank{ font-family:'Teko',sans-serif; font-weight:700; font-size:1.5rem; color:#ffd700; text-shadow:0 0 12px rgba(255,215,0,.4); line-height:1; margin-bottom:6px; }
+.spotlight-sq-logo{ width:52px;height:52px;border-radius:11px;object-fit:cover;display:block;border:1.5px solid rgba(255,255,255,.15) }
+.spotlight-sq-logo-fallback{ width:52px;height:52px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.12) }
+.spotlight-sq-logo-wrap{ position:relative; display:flex; align-items:center; justify-content:center; }
+.spotlight-sq-flag-badge{ position:absolute; bottom:-3px; right:-4px; width:22px; height:16px; object-fit:cover; border-radius:3px; box-shadow:0 0 0 1.5px rgba(255,255,255,.4); background:#0a0e18; }
+.spotlight-sq-flag-solo{ width:52px; height:38px; object-fit:cover; border-radius:8px; box-shadow:0 0 0 1.5px rgba(255,255,255,.15); }
+.spotlight-sq-name{ font-size:.78rem; font-weight:800; color:#fff; margin:8px 0 2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+.spotlight-sq-abbr{ font-size:.62rem; color:#8899aa; letter-spacing:.06em; margin-bottom:10px; }
+.spotlight-sq-bars{ display:flex; flex-direction:column; gap:7px; width:100%; margin-top:auto; }
+.spotlight-sq-bar-label{ display:flex; justify-content:space-between; font-size:.6rem; color:#aabbc8; margin-bottom:3px; font-weight:700; }
+.spotlight-sq-bar-track{ height:6px; border-radius:4px; background:rgba(255,255,255,.08); overflow:hidden; }
+.spotlight-sq-bar-fill{ height:100%; border-radius:4px; width:0%; transition:width .6s cubic-bezier(.3,.8,.4,1); }
+.spotlight-sq-bar-fill.win{ background:linear-gradient(90deg,#ffd700,#ff8c00); }
+.spotlight-sq-bar-fill.kills{ background:linear-gradient(90deg,#ff4444,#ff0066); }
+</style>
+</head>
+<body>
+
+<script>
+/* نفس مفاتيح القناة/التخزين المستخدمة بملف الأوفرلي الرئيسي — حتى تقرأ نفس بيانات الفرق تماماً */
+const KEY = 'pubg_live_eyad12';
+const CH  = 'pubg-live-eyad12';
+let currentSettings = {};
+let bc;
+
+function load() {
+    try { return JSON.parse(localStorage.getItem(KEY)); } catch(_) { return null; }
+}
+function totalPts(t) { return (t.kills || 0) + (t.placementPts || 0); }
+
+try{ bc = new BroadcastChannel(CH); }catch(_){}
+if(bc){
+    bc.onmessage = e => {
+        const msg = e.data;
+        if(msg?.type === 'UPDATE'){
+            currentSettings = msg.settings || {};
+            checkSpotlightTrigger(msg.teams || []);
+        }
+    };
+}
+/* fallback: استطلاع دوري للتخزين المحلي في حال تعذّر BroadcastChannel */
+setInterval(() => {
+    const data = load();
+    if (data?.teams) {
+        try{ currentSettings = JSON.parse(localStorage.getItem('lo_overlay_settings')||'{}'); }catch(_){}
+        checkSpotlightTrigger(data.teams);
+    }
+}, 1000);
+
+/* ════════════════════════════════════════════════
+   عرض الفرق المتبقية الدوّار (Spotlight) — شريط واحد، مربع لكل فريق
+   يظهر تلقائياً عند وصول عدد الفرق الحية لحد معيّن (افتراضي 5)،
+   يعرض كل الفرق الباقية معاً بشريط واحد (كل فريق بمربعه الخاص)،
+   نسب الفوز والكيلز مبنية بحيث مجموعها يساوي 100% بالضبط، لعدد دورات (افتراضي 3)، ثم يختفي ويرجع شفاف
+════════════════════════════════════════════════ */
+let _spotlightActive = false;
+let _spotlightSeen = false;
+let _spotlightLastCount = null;
+
+function getRemainingTeams(teams){
+    return teams.filter(t=>{
+        const players = (t.players||[]).map(p=> typeof p==='string' ? {status:p} : p);
+        return !players.every(p=>p.status==='eliminated');
+    });
+}
+
+function checkSpotlightTrigger(teams){
+    const cfg = currentSettings?.spotlight || {};
+    if(cfg.enabled===false) return; /* مُعطّل من الإعدادات */
+    const triggerCount = cfg.triggerCount || 5;
+
+    const remaining = getRemainingTeams(teams);
+    const count = remaining.length;
+
+    /* إعادة ضبط عند بدء جولة/ماتش جديد (العدد ارتفع فوق حد التفعيل مرة أخرى) */
+    if(_spotlightLastCount!==null && count>_spotlightLastCount && count>triggerCount){
+        _spotlightSeen=false;
+    }
+    _spotlightLastCount = count;
+
+    if(count>0 && count<=triggerCount && !_spotlightSeen && !_spotlightActive){
+        _spotlightSeen = true;
+        startSpotlightSequence(remaining, cfg);
+    }
+}
+
+function startSpotlightSequence(teams, cfg){
+    _spotlightActive = true;
+    const cycles  = Math.max(1, cfg.cycles || 3);
+    const showMs  = cfg.cardMs || 4500;
+    const gapMs   = cfg.gapMs  || 700;
+
+    const sorted = [...teams].sort((a,b)=>totalPts(b)-totalPts(a));
+    const totalPtsSum   = sorted.reduce((s,t)=>s+totalPts(t),0) || 1;
+    const totalKillsSum = sorted.reduce((s,t)=>s+(t.kills||0),0) || 1;
+
+    /* توزيع نسب دقيق يكمّل 100% بالضبط (بدل التقريب العادي اللي قد يعطي 99 أو 101) */
+    const winPcts  = normalizeToHundred(sorted.map(t=> (totalPts(t)/totalPtsSum)*100 ));
+    const killPcts = normalizeToHundred(sorted.map(t=> ((t.kills||0)/totalKillsSum)*100 ));
+
+    buildSpotlightStrip(sorted, winPcts, killPcts);
+
+    let cycle = 0;
+    (function runCycle(){
+        if(cycle>=cycles){ endSpotlightSequence(); return; }
+        showSpotlightStrip();
+        setTimeout(()=>{
+            hideSpotlightStrip();
+            cycle++;
+            setTimeout(runCycle, gapMs);
+        }, showMs);
+    })();
+}
+
+/* يوزّع نسب مئوية (أرقام عشرية) على قيم صحيحة، مع ضمان أن مجموعها يساوي 100 بالضبط */
+function normalizeToHundred(rawValues){
+    if(!rawValues.length) return [];
+    const floors = rawValues.map(v=>Math.floor(v));
+    let remainder = 100 - floors.reduce((a,b)=>a+b,0);
+    const order = rawValues
+        .map((v,i)=>({i, frac:v-Math.floor(v)}))
+        .sort((a,b)=>b.frac-a.frac);
+    const result=[...floors];
+    for(let k=0;k<remainder && k<order.length;k++){ result[order[k].i]++; }
+    return result;
+}
+
+function buildSpotlightStrip(teams, winPcts, killPcts){
+    let el = document.getElementById('spotlightOverlay');
+    if(!el){
+        el = document.createElement('div');
+        el.id = 'spotlightOverlay';
+        el.className = 'spotlight-overlay';
+        el.innerHTML = '<div class="spotlight-strip"></div>';
+        document.body.appendChild(el);
+    }
+    const strip = el.querySelector('.spotlight-strip');
+    strip.innerHTML = teams.map((t,i)=>{
+        const hasFlag = t.flag && t.flag!=='none';
+        const flagBadge = hasFlag ? `<img class="spotlight-sq-flag-badge" src="https://flagcdn.com/w40/${t.flag}.png" alt="">` : '';
+        const logoHtml = t.logo
+            ? `<span class="spotlight-sq-logo-wrap"><img class="spotlight-sq-logo" src="${t.logo}">${flagBadge}</span>`
+            : (hasFlag
+                ? `<span class="spotlight-sq-logo-wrap"><img class="spotlight-sq-flag-solo" src="https://flagcdn.com/w40/${t.flag}.png" alt=""></span>`
+                : `<span class="spotlight-sq-logo-wrap"><div class="spotlight-sq-logo-fallback">🏳️</div></span>`);
+        return `
+        <div class="spotlight-sq" style="border-color:${t.color?t.color+'55':'rgba(0,229,255,.3)'}">
+            <div class="spotlight-sq-rank">#${i+1}</div>
+            ${logoHtml}
+            <div class="spotlight-sq-name">${t.name}</div>
+            <div class="spotlight-sq-abbr">${t.abbr||''}</div>
+            <div class="spotlight-sq-bars">
+                <div>
+                    <div class="spotlight-sq-bar-label"><span>فوز</span><span>${winPcts[i]}%</span></div>
+                    <div class="spotlight-sq-bar-track"><div class="spotlight-sq-bar-fill win" data-w="${winPcts[i]}"></div></div>
+                </div>
+                <div>
+                    <div class="spotlight-sq-bar-label"><span>كيلز</span><span>${killPcts[i]}%</span></div>
+                    <div class="spotlight-sq-bar-track"><div class="spotlight-sq-bar-fill kills" data-w="${killPcts[i]}"></div></div>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+function showSpotlightStrip(){
+    const el=document.getElementById('spotlightOverlay'); if(!el) return;
+    el.classList.add('show');
+    requestAnimationFrame(()=>{
+        el.querySelectorAll('.spotlight-sq-bar-fill').forEach(b=> b.style.width = b.dataset.w+'%');
+    });
+}
+function hideSpotlightStrip(){
+    document.getElementById('spotlightOverlay')?.classList.remove('show');
+}
+function endSpotlightSequence(){
+    _spotlightActive = false;
+    document.getElementById('spotlightOverlay')?.remove();
+}
+
+/* تحميل أولي (في حال كان هناك بث سابق محفوظ) */
+try{ currentSettings = JSON.parse(localStorage.getItem('lo_overlay_settings')||'{}'); }catch(_){}
+const init = load();
+if(init?.teams?.length) checkSpotlightTrigger(init.teams);
+</script>
+
+</body>
+</html>
