@@ -100,6 +100,20 @@ async function loIdbDelete(key){
     });
 }
 
+/* ════════════════════════════════════════════════
+   Firebase Storage — رفع الخلفيات (صور/فيديو) عشان توصل لأي جهاز ثاني
+   IndexedDB (فوق) يبقى مصدر محلي سريع لنفس الجهاز، وهذا يضيف نسخة على
+   الإنترنت (رابط صغير) تنبعث عبر Realtime Database لأي جهاز ثاني مفتوح
+   عليه أوفرلي/OBS بمكان آخر.
+════════════════════════════════════════════════ */
+async function loUploadBgToStorage(file,path){
+    if(!window.loFirebase?.storage) throw new Error('Firebase Storage غير متاح (تأكد إنك متصل بالنت)');
+    const {storage,sRef,uploadBytes,getDownloadURL}=window.loFirebase;
+    const fileRef=sRef(storage,path);
+    await uploadBytes(fileRef,file);
+    return await getDownloadURL(fileRef);
+}
+
 /* ترحيل بيانات اللاعبين القديمة (نص فقط) لصيغة كائن {name,status} */
 function loMigratePlayers(t){
     if(!Array.isArray(t.players)) t.players=[];
@@ -768,10 +782,26 @@ function loBroadcast(){
 
 /* ════ Firebase — مزامنة الحالة بكسور الثانية بين أي جهازين ════ */
 const LO_FB_ROOM='default';
+/* يسمح بإرسال كائن الخلفية عبر فايربيس فقط لو رابط حقيقي (https://...) من Storage —
+   يمنع تسرّب أي base64/blob ثقيل يوصل بالغلط (فشل رفع، أو خلفية قديمة) لقاعدة البيانات */
+function loWebSafeBg(bg){
+    return (bg && typeof bg.data==='string' && bg.data.startsWith('http')) ? bg : null;
+}
 function loFirebasePushState(settings){
     if(!window.loFirebase) return;
     try{
         const{db,ref,set}=window.loFirebase;
+        const webSafeBg={
+            headerBg:loWebSafeBg(settings.bg?.headerBg),
+            bodyBg:loWebSafeBg(settings.bg?.bodyBg),
+            elimBannerBg:loWebSafeBg(settings.bg?.elimBannerBg),
+            killCardBg:loWebSafeBg(settings.bg?.killCardBg),
+        };
+        const webSafeTeamElimBg={};
+        for(const tid in (settings.teamElimBg||{})){
+            const safe=loWebSafeBg(settings.teamElimBg[tid]);
+            if(safe) webSafeTeamElimBg[tid]=safe;
+        }
         set(ref(db,`rooms/${LO_FB_ROOM}/state`),{
             teams:loTeams.map(t=>({
                 id:t.id,name:t.name,abbr:t.abbr,logo:t.logo||null,flag:t.flag||'none',color:t.color,
@@ -782,6 +812,7 @@ function loFirebasePushState(settings){
             settings:{
                 title:settings.title, showCount:settings.showCount, theme:settings.theme, fontSize:settings.fontSize,
                 colVis:settings.colVis, elimBanner:settings.elimBanner, spotlight:settings.spotlight,
+                bg:webSafeBg, teamElimBg:webSafeTeamElimBg,
             },
             updatedAt:Date.now(),
         }).catch(e=>console.warn('[Firebase] فشل رفع الحالة:',e));
@@ -1514,20 +1545,37 @@ function loSetTeamElimBg(tid,inp){
     const isVideo=file.type.startsWith('video');
     if(!file.type.startsWith('image')&&!isVideo){ loToast('⚠️ اختر صورة أو فيديو فقط','warn'); return; }
     if(file.size>40*1024*1024){ loToast('⚠️ الملف كبير جداً (أقصى 40MB)','warn'); return; }
-    const r=new FileReader();
-    r.onerror=()=>loToast('❌ فشل قراءة الملف','warn');
-    r.onload=async e=>{
-        try{
-            const bgObj={type:isVideo?'video':'image',data:e.target.result};
-            loTeamElimBg[tid]=bgObj;
-            await loIdbSet('elimBg_team_'+tid,bgObj);
-            loRenderTable();
-            loBroadcast();
-            loOpenTeamElimBg(tid); /* تحديث معاينة النافذة المفتوحة */
-            loToast('✅ تم حفظ خلفية الفريق','ok');
-        }catch(err){ loToast('❌ خطأ: '+err.message,'warn'); }
-    };
-    r.readAsDataURL(file);
+
+    /* معاينة فورية محلية */
+    loTeamElimBg[tid]={type:isVideo?'video':'image',data:URL.createObjectURL(file)};
+    loRenderTable();
+    loOpenTeamElimBg(tid);
+    loToast('⏳ جاري رفع خلفية الفريق...','info');
+
+    loUploadBgToStorage(file,`bg/elimBg_team_${tid}_${Date.now()}_${file.name}`).then(async url=>{
+        const bgObj={type:isVideo?'video':'image',data:url};
+        loTeamElimBg[tid]=bgObj;
+        try{ await loIdbSet('elimBg_team_'+tid,bgObj); }catch(_){}
+        loRenderTable();
+        loBroadcast();
+        loOpenTeamElimBg(tid);
+        loToast('✅ تم حفظ ومزامنة خلفية الفريق','ok');
+    }).catch(err=>{
+        console.error('[loSetTeamElimBg] فشل الرفع:',err);
+        loToast('⚠️ تعذر الرفع للإنترنت — الخلفية راح تشتغل بجهازك بس ('+err.message+')','warn');
+        const r=new FileReader();
+        r.onload=async e=>{
+            try{
+                const bgObj={type:isVideo?'video':'image',data:e.target.result};
+                loTeamElimBg[tid]=bgObj;
+                await loIdbSet('elimBg_team_'+tid,bgObj);
+                loRenderTable();
+                loBroadcast();
+                loOpenTeamElimBg(tid);
+            }catch(err2){ console.error('[loSetTeamElimBg] fallback error:',err2); }
+        };
+        r.readAsDataURL(file);
+    });
 }
 async function loClearTeamElimBg(tid){
     delete loTeamElimBg[tid];
@@ -1590,23 +1638,36 @@ function loSetBg(key,inp){
             loToast('⚠️ الملف كبير جداً (أقصى 40MB) — الحجم الحالي: '+(file.size/1024/1024).toFixed(1)+'MB','warn');
             return;
         }
-        const r=new FileReader();
-        r.onerror=()=>{ console.error('[loSetBg] FileReader error:',r.error); loToast('❌ فشل قراءة الملف','warn'); };
-        r.onload=async e=>{
-            try{
-                const bgObj={type:isVideo?'video':'image',data:e.target.result};
-                loBgSettings[key]=bgObj;
-                /* التخزين الفعلي بـ IndexedDB (يتحمل ملفات كبيرة بعكس localStorage) */
-                await loIdbSet(key,bgObj);
-                loSyncBgUI();
-                loBroadcast();
-                loToast('✅ تم تحديث الخلفية','ok');
-            }catch(err){
-                console.error('[loSetBg] onload error:',err);
-                loToast('❌ خطأ بالحفظ: '+err.message,'warn');
-            }
-        };
-        r.readAsDataURL(file);
+
+        /* معاينة فورية بجهازك (بلاك محلي، بدون انتظار الرفع) */
+        loBgSettings[key]={type:isVideo?'video':'image',data:URL.createObjectURL(file)};
+        loSyncBgUI();
+        loToast('⏳ جاري رفع الخلفية حتى توصل لأي جهاز ثاني...','info');
+
+        /* الرفع الفعلي لفايربيس ستوريج — الرابط الراجع خفيف وينبعث عبر Realtime Database */
+        loUploadBgToStorage(file,`bg/${key}_${Date.now()}_${file.name}`).then(async url=>{
+            const bgObj={type:isVideo?'video':'image',data:url};
+            loBgSettings[key]=bgObj;
+            try{ await loIdbSet(key,bgObj); }catch(_){}
+            loSyncBgUI();
+            loBroadcast();
+            loToast('✅ الخلفية مرفوعة ومتزامنة على كل الأجهزة','ok');
+        }).catch(err=>{
+            console.error('[loSetBg] فشل الرفع لفايربيس ستوريج:',err);
+            loToast('⚠️ تعذر الرفع للإنترنت — الخلفية راح تشتغل بجهازك بس مو بجهاز ثاني ('+err.message+')','warn');
+            /* تراجع للسلوك القديم (تخزين محلي base64) حتى تضل شغالة بجهازك على الأقل */
+            const r=new FileReader();
+            r.onload=async e=>{
+                try{
+                    const bgObj={type:isVideo?'video':'image',data:e.target.result};
+                    loBgSettings[key]=bgObj;
+                    await loIdbSet(key,bgObj);
+                    loSyncBgUI();
+                    loBroadcast();
+                }catch(err2){ console.error('[loSetBg] fallback error:',err2); }
+            };
+            r.readAsDataURL(file);
+        });
     }catch(err){
         console.error('[loSetBg] outer error:',err);
         loToast('❌ خطأ غير متوقع: '+err.message,'warn');
