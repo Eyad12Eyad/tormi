@@ -54,6 +54,31 @@ html,body { background:transparent; font-family:'Rajdhani','Segoe UI',Arial,sans
 </head>
 <body>
 
+<!-- Firebase — استقبال تحديثات من جهاز ثاني (كسور الثانية) -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyDoB4GcBTfJjeoWXFXk-80xe1p0I9whRY0",
+        authDomain: "pubg-overlay.firebaseapp.com",
+        databaseURL: "https://pubg-overlay-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "pubg-overlay",
+        storageBucket: "pubg-overlay.firebasestorage.app",
+        messagingSenderId: "71044068816",
+        appId: "1:71044068816:web:e0cfcb64bfa51e58c475d5"
+    };
+
+    try{
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        window.loFirebase = { db, ref, onValue };
+    }catch(e){
+        console.warn('[Firebase] تعذر التهيئة — الملف يشتغل محلياً بس:', e);
+    }
+    window.dispatchEvent(new Event('lo-firebase-ready'));
+</script>
+
 <script>
 /* نفس مفاتيح القناة/التخزين المستخدمة بملف الأوفرلي الرئيسي — حتى تقرأ نفس بيانات الفرق تماماً */
 const KEY = 'pubg_live_eyad12';
@@ -219,6 +244,22 @@ function endSpotlightSequence(){
 try{ currentSettings = JSON.parse(localStorage.getItem('lo_overlay_settings')||'{}'); }catch(_){}
 const init = load();
 if(init?.teams?.length) checkSpotlightTrigger(init.teams);
+
+/* ── Firebase (جهاز ثاني — عبر الإنترنت) ── */
+const LO_FB_ROOM='default';
+function loSetupFirebaseListeners(){
+    if(!window.loFirebase) return;
+    const {db,ref,onValue} = window.loFirebase;
+    try{
+        onValue(ref(db,`rooms/${LO_FB_ROOM}/state`), snap=>{
+            const val=snap.val(); if(!val) return;
+            currentSettings = val.settings||{};
+            checkSpotlightTrigger(val.teams||[]);
+        });
+    }catch(e){ console.warn('[Firebase] فشل ربط المستمعين:', e); }
+}
+if(window.loFirebase) loSetupFirebaseListeners();
+else window.addEventListener('lo-firebase-ready', loSetupFirebaseListeners);
 </script>
 
 </body>
