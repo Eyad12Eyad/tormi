@@ -49,6 +49,7 @@ html,body { background:transparent; font-family:'Rajdhani','Segoe UI',Arial,sans
     background:linear-gradient(90deg, rgba(20,26,40,.75), rgba(10,13,20,.65));
 }
 .kc-team{ color:#fff; font-weight:800; font-size:.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px; }
+.kc-killer-line{ color:#ffcf4d; font-weight:700; font-size:.68rem; letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px; margin-bottom:1px; }
 .kc-player{ color:#9aa8bb; font-size:.7rem; font-weight:600; letter-spacing:.03em; }
 .kc-stats{ display:flex; }
 .kc-stat{
@@ -83,7 +84,13 @@ html,body { background:transparent; font-family:'Rajdhani','Segoe UI',Arial,sans
     try{
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
-        window.loFirebase = { db, ref, onValue, query, orderByChild, startAt, onChildAdded };
+        window.loFirebase = { db, ref, onValue, query, orderByChild, startAt, onChildAdded, serverTimeOffset: 0 };
+        await new Promise(resolve=>{
+            onValue(ref(db,'.info/serverTimeOffset'), snap=>{
+                window.loFirebase.serverTimeOffset = snap.val() || 0;
+                resolve();
+            }, { onlyOnce:true });
+        });
     }catch(e){
         console.warn('[Firebase] تعذر التهيئة — الملف يشتغل محلياً بس:', e);
     }
@@ -124,16 +131,16 @@ try{ bc = new BroadcastChannel(CH); }catch(_){}
 if(bc){
     bc.onmessage = e => {
         if (e.data?.type === 'UPDATE') { currentSettings = e.data.settings || {}; applyKcBg(); }
-        if (e.data?.type === 'PLAYER_KILLED') showKillCard(e.data.team, e.data.player, e.data.damage, e.data.distance, e.data.airdrops);
+        if (e.data?.type === 'PLAYER_KILLED') showKillCard(e.data.team, e.data.player, e.data.damage, e.data.distance, e.data.airdrops, e.data.killer, e.data.mode, e.data.count);
     };
 }
 
 /* ── Firebase (جهاز ثاني — عبر الإنترنت) ── */
 const LO_FB_ROOM='default';
-const _fbPageLoadTs = Date.now();
 function loSetupFirebaseListeners(){
     if(!window.loFirebase) return;
-    const {db,ref,onValue,query,orderByChild,startAt,onChildAdded} = window.loFirebase;
+    const {db,ref,onValue,query,orderByChild,startAt,onChildAdded,serverTimeOffset} = window.loFirebase;
+    const _fbPageLoadTs = Date.now() + (serverTimeOffset||0);
     try{
         onValue(ref(db,`rooms/${LO_FB_ROOM}/state`), snap=>{
             const val=snap.val(); if(!val) return;
@@ -143,7 +150,7 @@ function loSetupFirebaseListeners(){
         const evQuery = query(ref(db,`rooms/${LO_FB_ROOM}/events`), orderByChild('ts'), startAt(_fbPageLoadTs));
         onChildAdded(evQuery, snap=>{
             const ev=snap.val(); if(!ev) return;
-            if(ev.type==='PLAYER_KILLED') showKillCard(ev.team, ev.player, ev.damage, ev.distance, ev.airdrops);
+            if(ev.type==='PLAYER_KILLED') showKillCard(ev.team, ev.player, ev.damage, ev.distance, ev.airdrops, ev.killer, ev.mode, ev.count);
         });
     }catch(e){ console.warn('[Firebase] فشل ربط المستمعين:', e); }
 }
@@ -192,8 +199,8 @@ function setKcBgLayer(container, bgData){
 let _killCardQueue = [];
 let _killCardShowing = false;
 
-function showKillCard(team, player, damage, distance, airdrops){
-    _killCardQueue.push({team, player, damage, distance, airdrops});
+function showKillCard(team, player, damage, distance, airdrops, killer, mode, count){
+    _killCardQueue.push({team, player, damage, distance, airdrops, killer, mode:mode||'kill', count:count||1});
     if(!_killCardShowing) processKillCardQueue();
 }
 
@@ -224,9 +231,14 @@ function processKillCardQueue(){
         const flagHtml = hasFlag ? `<img class="kc-flag" src="https://flagcdn.com/w40/${t.flag}.png" alt="">` : '';
 
         const content = card.querySelector('.kc-content');
+        const actionVerb = ev.mode==='knock' ? 'نوك' : 'قتل';
+        const killerLine = ev.killer
+            ? `<div class="kc-killer-line">${ev.killer.name} ${actionVerb} ${ev.count||1} من ${t.name}</div>`
+            : '';
         content.innerHTML = `
             <div class="kc-logo-wrap" style="border-color:${t.color||'rgba(255,255,255,.2)'}">${logoHtml}${flagHtml}</div>
             <div class="kc-info">
+                ${killerLine}
                 <div class="kc-team">${t.name}</div>
                 ${ev.player ? `<div class="kc-player">${ev.player}</div>` : ''}
             </div>
