@@ -1250,9 +1250,12 @@ function loDisqualifyTeam(tid){
 }
 
 /* كارد قتلة مفردة — بنفس ستايل شاشة اللعبة الأصلية (شعار + اسم الفريق + اللاعب + الضرر + المسافة) */
-function loAnnounceKillCard(vTeam,playerName,damage,distance,airdrops){
+function loAnnounceKillCard(vTeam,playerName,damage,distance,airdrops,kTeam,mode,count){
     const payload={
         team:{ id:vTeam.id, name:vTeam.name, abbr:vTeam.abbr, logo:vTeam.logo, flag:vTeam.flag, color:vTeam.color },
+        killer: kTeam ? { id:kTeam.id, name:kTeam.name, abbr:kTeam.abbr, logo:kTeam.logo, flag:kTeam.flag, color:kTeam.color } : null,
+        mode: mode||'kill',
+        count: count||1,
         player:playerName||'',
         damage:damage??null,
         distance:distance??null,
@@ -1396,7 +1399,9 @@ function loApplyTeamAction(killerTid,victimTid,mode,count){
 
     if(isKill){
         const lastAffectedPlayer = vTeam.players[affected[affected.length-1].pi];
-        loAnnounceKillCard(vTeam, lastAffectedPlayer?.name||'', damage, distance, airdrops);
+        loAnnounceKillCard(vTeam, lastAffectedPlayer?.name||'', damage, distance, airdrops, kTeam, 'kill', affected.length);
+    } else {
+        loAnnounceKillCard(vTeam, '', null, null, null, kTeam, 'knock', affected.length);
     }
 
     const label=isKill
@@ -2122,11 +2127,12 @@ function loApplyKillEvent(killer,victim){
         vPlayer.status='eliminated';
         loKDirect(kTeam.id,1);
         killPointApplied=true;
-        loAnnounceKillCard(vTeam,victim.name,null,null);
+        loAnnounceKillCard(vTeam,victim.name,null,null,null,kTeam,'kill',1);
         loActionToast(`☠️ تفنيش تلقائي: ${killer.name} ⚔️ ${victim.name} (+1 لـ${kTeam.abbr})`,
             ()=>loUndoKillEvent(vTeam.id,victim.pi,prevStatus,kTeam.id,killPointApplied,wasAlreadyElim));
     } else {
         vPlayer.status='knocked';
+        loAnnounceKillCard(vTeam,victim.name,null,null,null,kTeam,'knock',1);
         loActionToast(`🎯 نوك تلقائي: ${killer.name} ⚔️ ${victim.name}`,
             ()=>loUndoKillEvent(vTeam.id,victim.pi,prevStatus,kTeam.id,killPointApplied,wasAlreadyElim));
     }
@@ -2219,11 +2225,12 @@ function loConfirmPendingKill(killerTid,killerPi,victimTid,victimPi){
         /* تفنيش — نضيف نقطة للقاتل */
         vPlayer.status='eliminated';
         loKDirect(killerTid,1);
-        loAnnounceKillCard(vTeam,vPlayer.name,null,null);
+        loAnnounceKillCard(vTeam,vPlayer.name,null,null,null,kTeam,'kill',1);
         loToast('☠️ تفنيش! +1 لفريق '+kTeam.abbr,'ok');
     } else {
         /* نوك أول */
         vPlayer.status='knocked';
+        loAnnounceKillCard(vTeam,vPlayer.name,null,null,null,kTeam,'knock',1);
         loToast('🎯 تم تسجيل النوك','ok');
     }
     const allDead=loAllDead(vTeam);
