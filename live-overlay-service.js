@@ -611,6 +611,7 @@ return `<div class="service-interface" style="padding:0">
         </div>
 
         <button class="lo-big-btn primary" onclick="loTestElimBanner()"><i class="fas fa-bell"></i> تجربة الإشعار الآن</button>
+        <button class="lo-big-btn" style="background:linear-gradient(135deg,#ff4d4d,#b30000);margin-top:.5rem" onclick="loOpenDisqualifyPicker()"><i class="fas fa-gavel"></i> إقصاء فريق لمخالفة القوانين</button>
       </div>
 
       <!-- عرض الفرق المتبقية الدوّار -->
@@ -819,12 +820,12 @@ function loFirebasePushState(settings){
     }catch(e){ console.warn('[Firebase] خطأ غير متوقع بالرفع:',e); }
 }
 function loFirebasePushEvent(type,payload){
-    if(!window.loFirebase) return;
+    if(!window.loFirebase) return Promise.reject(new Error('no-firebase'));
     try{
         const{db,ref,push,serverTimeOffset}=window.loFirebase;
-        push(ref(db,`rooms/${LO_FB_ROOM}/events`),{type,...payload,ts:Date.now()+(serverTimeOffset||0)})
-            .catch(e=>console.warn('[Firebase] فشل رفع الحدث:',e));
-    }catch(e){ console.warn('[Firebase] خطأ غير متوقع بحدث:',e); }
+        return push(ref(db,`rooms/${LO_FB_ROOM}/events`),{type,...payload,ts:Date.now()+(serverTimeOffset||0)})
+            .catch(e=>{ console.warn('[Firebase] فشل رفع الحدث:',e); throw e; });
+    }catch(e){ console.warn('[Firebase] خطأ غير متوقع بحدث:',e); return Promise.reject(e); }
 }
 /* أول ما يجهز Firebase (قد يوصل متأخر عن أول تحميل)، نعيد رفع آخر حالة حتى توصل الأجهزة الثانية */
 window.addEventListener('lo-firebase-ready', ()=>{ try{ loBroadcast(); }catch(_){} });
@@ -1208,14 +1209,44 @@ function loAutoPlaceOnElim(t){
     t.placementPts=LO_PLACEMENT[place]||0;
 }
 
-/* إرسال حدث إقصاء لعرضه كبانر بشاشة الأوفرلي */
-function loAnnounceElimination(t){
-    const payload={ id:t.id, name:t.name, abbr:t.abbr, logo:t.logo, flag:t.flag, color:t.color, kills:t.kills||0, place:t.place };
+/* إرسال حدث إقصاء لعرضه كبانر بشاشة الأوفرلي — reason اختياري (مثلاً "مخالفة القوانين") */
+function loAnnounceElimination(t,reason){
+    const payload={ id:t.id, name:t.name, abbr:t.abbr, logo:t.logo, flag:t.flag, color:t.color, kills:t.kills||0, place:t.place, reason:reason||null };
     try{
         loBc?.postMessage({ type:'TEAM_ELIMINATED', team:payload });
     }catch(_){}
-    loFirebasePushEvent('TEAM_ELIMINATED', {team:payload});
-    loToast(`☠️ ${t.name} تم إقصاؤه — المركز #${t.place}`,'warn');
+    loFirebasePushEvent('TEAM_ELIMINATED', {team:payload}).catch(()=>{});
+    loToast(reason?`🚫 ${t.name} أُقصي — ${reason} — المركز #${t.place}`:`☠️ ${t.name} تم إقصاؤه — المركز #${t.place}`,'warn');
+}
+
+/* ════ إقصاء يدوي لمخالفة القوانين — يختار المستخدم الفريق ويُقصى فوراً بغض النظر عن حالة اللاعبين ════ */
+function loOpenDisqualifyPicker(){
+    document.getElementById('lo-dq-picker-popup')?.remove();
+    if(!loTeams.length){ loToast('⚠️ ماكو فرق بعد','warn'); return; }
+    const pop=document.createElement('div');
+    pop.id='lo-dq-picker-popup';
+    pop.className='lo-place-popup';
+    pop.style.minWidth='270px';
+    pop.innerHTML=`<h4>🚫 إقصاء لمخالفة القوانين — اختر الفريق</h4>
+        <div class="lo-kill-picker-list">
+            ${loTeams.map(t=>`<button class="lo-kill-picker-item" style="border-color:${t.color||'#888'}" onclick="loDisqualifyTeam(${t.id})">
+                <span class="lo-kpi-dot" style="background:${t.color||'#888'}"></span>
+                <span class="lo-kpi-name">${t.name}</span>
+            </button>`).join('')}
+        </div>
+        <button class="lo-pl-cancel" onclick="document.getElementById('lo-dq-picker-popup')?.remove()">إلغاء</button>`;
+    document.body.appendChild(pop);
+}
+function loDisqualifyTeam(tid){
+    document.getElementById('lo-dq-picker-popup')?.remove();
+    const t=loTeams.find(tm=>tm.id===tid); if(!t) return;
+    t.players.forEach(p=>p.status='eliminated');
+    if(!loEliminationOrder.includes(tid)){
+        loEliminationOrder.push(tid);
+        loAutoPlaceOnElim(t);
+    }
+    loAnnounceElimination(t,'مخالفة القوانين');
+    loRenderTable(); loBroadcast();
 }
 
 /* كارد قتلة مفردة — بنفس ستايل شاشة اللعبة الأصلية (شعار + اسم الفريق + اللاعب + الضرر + المسافة) */
@@ -1230,7 +1261,7 @@ function loAnnounceKillCard(vTeam,playerName,damage,distance,airdrops){
     try{
         loBc?.postMessage({ type:'PLAYER_KILLED', ...payload });
     }catch(_){}
-    loFirebasePushEvent('PLAYER_KILLED', payload);
+    loFirebasePushEvent('PLAYER_KILLED', payload).catch(()=>{});
 }
 
 /* إضافة قتلة — مع قفل مؤقت لمنع الضغط بالخطأ على فريق آخر بعد تغيّر ترتيب الجدول */
@@ -1494,13 +1525,20 @@ document.addEventListener('touchmove', loEbDragMove, {passive:false});
 document.addEventListener('touchend', loEbDragEnd);
 
 /* يرسل إشعار إقصاء تجريبي لمعاينة الشكل/المكان/الحجم بدون الحاجة لموت فريق فعلياً */
-function loTestElimBanner(){
+async function loTestElimBanner(){
     const testTeam={id:-1,name:'فريق تجريبي',abbr:'TST',logo:null,flag:'none',color:'#ff4444',kills:7,place:5};
+    try{ loBc?.postMessage({type:'TEAM_ELIMINATED',team:testTeam}); }catch(_){}
+
+    if(!window.loFirebase){
+        loToast('⚠️ فايربيس غير متصل بهذا الجهاز — الإشعار راح يوصل لنفس الجهاز بس، مو للجهاز الثاني','warn');
+        return;
+    }
     try{
-        loBc?.postMessage({type:'TEAM_ELIMINATED',team:testTeam});
-    }catch(_){}
-    loFirebasePushEvent('TEAM_ELIMINATED', {team:testTeam});
-    loToast('🔔 تم إرسال إشعار تجريبي — تأكد أن نافذة/جهاز الأوفرلي مفتوح لرؤيته','info');
+        await loFirebasePushEvent('TEAM_ELIMINATED', {team:testTeam});
+        loToast('🔔 وصل فايربيس فعلاً — تأكد أن نافذة/جهاز الأوفرلي مفتوح ومحدَّث لآخر نسخة لرؤيته','info');
+    }catch(e){
+        loToast('❌ فشل الإرسال لفايربيس (صلاحيات/اتصال) — هذا سبب عدم وصوله للجهاز الثاني: '+(e?.code||e?.message||e),'warn');
+    }
 }
 
 /* ════ إعدادات عرض الفرق المتبقية الدوّار (Spotlight) ════ */
