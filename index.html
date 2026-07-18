@@ -30,6 +30,32 @@ html, body {
     </div>
 </div>
 
+<!-- Firebase — مزامنة الحالة بين أي جهازين عبر الإنترنت (كسور الثانية). لو فشل التحميل (بدون نت مثلاً)،
+     الأداة تشتغل محلياً بس (نفس الجهاز) عادي بدون أي كسر بالوظائف. -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+    import { getDatabase, ref, set, onValue, push, query, orderByChild, startAt, onChildAdded } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyDoB4GcBTfJjeoWXFXk-80xe1p0I9whRY0",
+        authDomain: "pubg-overlay.firebaseapp.com",
+        databaseURL: "https://pubg-overlay-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "pubg-overlay",
+        storageBucket: "pubg-overlay.firebasestorage.app",
+        messagingSenderId: "71044068816",
+        appId: "1:71044068816:web:e0cfcb64bfa51e58c475d5"
+    };
+
+    try{
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        window.loFirebase = { db, ref, set, onValue, push, query, orderByChild, startAt, onChildAdded };
+    }catch(e){
+        console.warn('[Firebase] تعذر التهيئة — الأداة تشتغل محلياً بس بدون مزامنة بين الأجهزة:', e);
+    }
+    window.dispatchEvent(new Event('lo-firebase-ready'));
+</script>
+
 <!-- الملف الأساسي بكل منطق اللوحة — لازم يكون بنفس المجلد -->
 <script src="live-overlay-service.js"></script>
 <script>
