@@ -413,6 +413,12 @@ let prevData   = null;
 let currentSettings = {};
 let bc;
 
+/* حماية من البيانات القديمة: نسجل وقت آخر تحديث "معتمد" (من فايربيس أو BroadcastChannel)،
+   وأي بيانات جاية من localStorage المحلي أقدم من هذا الوقت تُتجاهل تماماً.
+   هذا يمنع localStorage القديم/العالق بجهاز الأوفرلي من إنه يكتب فوق تحديث حقيقي وصل تواً. */
+let lastGoodTs = 0;
+let lastTeams  = [];
+
 /* ════ IndexedDB — قراءة الخلفيات (صور/فيديو) المخزّنة من لوحة التحكم ════
    نفس القاعدة/المخزن المستخدمين بملف الخدمة، حتى تُقرأ نفس الملفات هنا */
 const LO_DB_NAME='lo_media_store', LO_DB_STORE='media';
@@ -438,7 +444,11 @@ async function loIdbGet(key){
 try {
     bc = new BroadcastChannel(CH);
     bc.onmessage = e => {
-        if (e.data?.type === 'UPDATE') { currentSettings=e.data.settings||{}; applySettings(); render(e.data.teams); }
+        if (e.data?.type === 'UPDATE') {
+            lastGoodTs = Date.now(); /* أحدث مصدر دائماً — يفوز على أي شي محلي أقدم */
+            lastTeams  = e.data.teams || [];
+            currentSettings=e.data.settings||{}; applySettings(); render(lastTeams);
+        }
         if (e.data?.type === 'TEAM_ELIMINATED') showElimBanner(e.data.team);
     };
 } catch(_) {}
@@ -452,9 +462,13 @@ function loSetupFirebaseListeners(){
     try{
         onValue(ref(db,`rooms/${LO_FB_ROOM}/state`), snap=>{
             const val=snap.val(); if(!val) return;
+            const ts = val.updatedAt || Date.now();
+            if(ts < lastGoodTs) return; /* تجاهل أي حالة أقدم من آخر تحديث معتمد وصلنا */
+            lastGoodTs = ts;
+            lastTeams  = val.teams||[];
             currentSettings = val.settings||{};
             applySettings();
-            render(val.teams||[]);
+            render(lastTeams);
         });
         const evQuery = query(ref(db,`rooms/${LO_FB_ROOM}/events`), orderByChild('ts'), startAt(_fbPageLoadTs));
         onChildAdded(evQuery, snap=>{
@@ -538,19 +552,25 @@ async function processElimQueue(){
     }
 }
 
-/* ── Name toggle every 2 s ── */
+/* ── Name toggle every 2 s ──
+   نستخدم lastTeams (آخر بيانات معتمدة فعلياً من فايربيس/BroadcastChannel) بدل قراءة
+   localStorage من جديد، حتى ما نرجع نعرض بيانات محلية قديمة/عالقة بجهاز الأوفرلي */
 setInterval(() => {
-    const data = load();
-    if (!data?.teams?.length) return;
-    data.teams.forEach(t => { nameToggle[t.id] = !nameToggle[t.id]; });
-    render(data.teams);
+    if (!lastTeams.length) return;
+    lastTeams.forEach(t => { nameToggle[t.id] = !nameToggle[t.id]; });
+    render(lastTeams);
 }, 2000);
 
-/* ── Poll localStorage ── */
+/* ── Poll localStorage (فقط كخط دفاع أخير لنفس الجهاز، ولو ماكو تحديث أحدث وصل أصلاً) ── */
 setInterval(() => {
     const data = load();
+    const ts = data?.updated || 0;
+    if (ts < lastGoodTs) return; /* تجاهل بيانات localStorage الأقدم من آخر تحديث معتمد */
     const sig  = JSON.stringify(data);
-    if (sig !== prevData) { prevData = sig; if (data?.teams?.length) render(data.teams); }
+    if (sig !== prevData) {
+        prevData = sig;
+        if (data?.teams?.length) { lastGoodTs = ts || Date.now(); lastTeams = data.teams; render(lastTeams); }
+    }
 }, 400);
 
 function load() {
@@ -724,7 +744,7 @@ function runRowsHideSequence(cycles, showMs, gapMs){
 /* Initial load */
 try{ currentSettings=JSON.parse(localStorage.getItem('lo_overlay_settings')||'{}'); applySettings(); }catch(_){}
 const init = load();
-if (init?.teams?.length) render(init.teams);
+if (init?.teams?.length) { lastTeams = init.teams; lastGoodTs = init.updated || Date.now(); render(lastTeams); }
 
 /* الخلفيات (صور/فيديو) صارت تُخزَّن بـ IndexedDB وليس localStorage (يتحمل ملفات أكبر بكثير)،
    لذا نحمّلها هنا بشكل غير متزامن كي تظهر حتى قبل وصول أول بث مباشر من لوحة التحكم */
