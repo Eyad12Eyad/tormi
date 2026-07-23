@@ -12,7 +12,7 @@
 * { margin:0; padding:0; box-sizing:border-box; }
 html,body { background:transparent; font-family:'Rajdhani','Segoe UI',Arial,sans-serif; width:100%; height:100%; overflow:hidden; }
 
-/* ════ كارد قتلة مفردة — تصميم: شعار فريق القاتل + مختصره | KILL/KNOCK xN | شعار الفريق المقتول منه + مختصره ════ */
+/* ════ كارد قتلة مفردة — بستايل شاشة اللعبة الأصلية (شعار + اسم + ضرر + مسافة + إسقاطات) ════ */
 .kill-card{
     position:fixed;
     bottom:26px; left:26px;
@@ -34,29 +34,30 @@ html,body { background:transparent; font-family:'Rajdhani','Segoe UI',Arial,sans
 .kc-bg-layer::after{ content:''; position:absolute; inset:0; background:linear-gradient(90deg, rgba(4,6,10,.55), rgba(4,6,10,.75)); }
 .kc-content{ position:relative; z-index:1; display:flex; align-items:stretch; }
 
-/* صندوق فريق (شعار + مختصر) — يُستخدم لصندوق القاتل (يسار) وصندوق المقتول منه (يمين) */
-.kc-side{
-    position:relative; flex-shrink:0;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:3px; padding:8px 14px; min-width:66px;
+.kc-logo-wrap{
+    position:relative; width:56px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
     background:rgba(0,0,0,.35);
 }
-.kc-side.kc-killer{ border-right:3px solid; }
-.kc-side.kc-victim{ border-left:3px solid; }
-.kc-logo-img{ width:34px; height:34px; border-radius:8px; object-fit:cover; }
-.kc-logo-fallback{ font-family:'Teko',sans-serif; font-weight:700; font-size:1.3rem; }
+.kc-logo-img{ width:38px; height:38px; border-radius:8px; object-fit:cover; }
+.kc-logo-fallback{ font-family:'Teko',sans-serif; font-weight:700; font-size:1.4rem; }
 .kc-flag{ position:absolute; bottom:3px; right:3px; width:16px; height:12px; object-fit:cover; border-radius:2px; box-shadow:0 0 0 1px rgba(255,255,255,.4); }
-.kc-side-abbr{ color:#fff; font-weight:800; font-size:.72rem; letter-spacing:.03em; white-space:nowrap; }
 
-/* المنتصف — KILL / KNOCK + العدد */
-.kc-mid{
+.kc-team-block{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; }
+.kc-team-block .kc-logo-wrap{ border-right:none; border-bottom:3px solid; width:64px; }
+.kc-abbr{ font-family:'Teko',sans-serif; font-weight:700; font-size:.95rem; color:#fff; letter-spacing:.04em; padding:2px 8px; background:rgba(0,0,0,.35); width:100%; text-align:center; }
+
+.kc-action{
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:1px; padding:6px 18px; min-width:90px;
-    background:linear-gradient(90deg, rgba(20,26,40,.75), rgba(10,13,20,.65));
+    padding:6px 16px; min-width:80px;
+    background:linear-gradient(180deg, rgba(120,20,20,.55), rgba(60,8,8,.55));
+    border-right:1px solid rgba(255,255,255,.08); border-left:1px solid rgba(255,255,255,.08);
 }
-.kc-action{ font-family:'Teko',sans-serif; font-weight:700; font-size:1.4rem; letter-spacing:.12em; line-height:1; color:#ff5252; }
-.kc-action.knock{ color:#ffcf4d; }
-.kc-count{ color:#9aa8bb; font-size:.72rem; font-weight:700; letter-spacing:.04em; }
+.kc-action-word{ font-family:'Teko',sans-serif; font-weight:700; font-size:1.15rem; letter-spacing:.08em; color:#ff5555; text-transform:uppercase; }
+.kc-action-knock .kc-action-word{ color:#ffcf4d; }
+.kc-action-count{ font-family:'Teko',sans-serif; font-weight:700; font-size:1.4rem; color:#fff; line-height:1; }
+
+.kc-player{ color:#9aa8bb; font-size:.7rem; font-weight:600; letter-spacing:.03em; padding:6px 14px; }
 </style>
 </head>
 <body>
@@ -218,40 +219,42 @@ function processKillCardQueue(){
         /* الخلفية تُطبَّق/تُحدَّث دون لمس المحتوى — تبقى ثابتة (يشتغل الفيديو بسلاسة) */
         setKcBgLayer(card, currentSettings?.bg?.killCardBg);
 
-        const victim = ev.team;
-        const killer = ev.killer || null;
-
-        function sideLogo(team){
-            return team?.logo
+        function kcTeamBlock(team){
+            if(!team) return '';
+            const logoHtml = team.logo
                 ? `<img class="kc-logo-img" src="${team.logo}">`
-                : `<div class="kc-logo-fallback" style="color:${team?.color||'#fff'}">${(team?.abbr||team?.name||'?').slice(0,2).toUpperCase()}</div>`;
-        }
-        function sideFlag(team){
-            return (team?.flag && team.flag!=='none')
-                ? `<img class="kc-flag" src="https://flagcdn.com/w40/${team.flag}.png" alt="">`
-                : '';
-        }
-        function sideAbbr(team){
-            return (team?.abbr || team?.name || '').toString().toUpperCase();
-        }
-
-        const content = card.querySelector('.kc-content');
-        const isKnock = ev.mode==='knock';
-        const actionLabel = isKnock ? 'KNOCK' : 'KILL';
-
-        content.innerHTML = `
-            <div class="kc-side kc-killer" style="border-color:${killer?.color||'rgba(255,255,255,.2)'}">
-                ${sideLogo(killer)}${sideFlag(killer)}
-                <div class="kc-side-abbr">${sideAbbr(killer)}</div>
-            </div>
-            <div class="kc-mid">
-                <div class="kc-action${isKnock?' knock':''}">${actionLabel}</div>
-                <div class="kc-count">x${ev.count||1}</div>
-            </div>
-            <div class="kc-side kc-victim" style="border-color:${victim?.color||'rgba(255,255,255,.2)'}">
-                ${sideLogo(victim)}${sideFlag(victim)}
-                <div class="kc-side-abbr">${sideAbbr(victim)}</div>
+                : `<div class="kc-logo-fallback" style="color:${team.color||'#fff'}">${(team.abbr||team.name||'?').slice(0,2).toUpperCase()}</div>`;
+            const hasFlag = team.flag && team.flag!=='none';
+            const flagHtml = hasFlag ? `<img class="kc-flag" src="https://flagcdn.com/w40/${team.flag}.png" alt="">` : '';
+            return `<div class="kc-team-block">
+                <div class="kc-logo-wrap" style="border-color:${team.color||'rgba(255,255,255,.2)'}">${logoHtml}${flagHtml}</div>
+                <div class="kc-abbr">${(team.abbr||team.name||'').toUpperCase()}</div>
             </div>`;
+        }
+
+        const t = ev.team;
+        const content = card.querySelector('.kc-content');
+        const actionWord = ev.mode==='knock' ? 'KNOCK' : 'KILL';
+        const actionClass = ev.mode==='knock' ? 'kc-action-knock' : '';
+
+        if(ev.killer){
+            /* المربع الأول = الفريق القاتل، بالنص "KILL/KNOCK" وعدد، ثم الفريق المقتول منه */
+            content.innerHTML = `
+                ${kcTeamBlock(ev.killer)}
+                <div class="kc-action ${actionClass}">
+                    <div class="kc-action-word">${actionWord}</div>
+                    <div class="kc-action-count">x${ev.count||1}</div>
+                </div>
+                ${kcTeamBlock(t)}`;
+        } else {
+            /* ما عندنا فريق قاتل معروف (كشف تلقائي) — نعرض فريق الضحية بس */
+            content.innerHTML = `
+                ${kcTeamBlock(t)}
+                <div class="kc-action ${actionClass}">
+                    <div class="kc-action-word">${actionWord}</div>
+                </div>
+                ${ev.player ? `<div class="kc-player">${ev.player}</div>` : ''}`;
+        }
 
         requestAnimationFrame(()=> card.classList.add('show'));
         setTimeout(()=>{
