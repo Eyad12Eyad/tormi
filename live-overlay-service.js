@@ -6,8 +6,7 @@
 
 const LO_KEY   = 'pubg_live_eyad12';
 const LO_CH    = 'pubg-live-eyad12';
-const LO_PLACEMENT_DEFAULT = [0,12,9,7,5,4,3,2,1,1,1,0,0,0,0,0,0,0,0,0,0,0];
-let loPlacementPoints = [...LO_PLACEMENT_DEFAULT]; /* قابلة للتعديل من لوحة التحكم — تُحمَّل من localStorage إذا محفوظة */
+let LO_PLACEMENT = [0,12,9,7,5,4,3,2,1,1,1,0,0,0,0,0,0,0,0,0,0,0];
 /* رموز أعلام الدول (ISO) — تُستخدم لعرض العلم كصورة حقيقية بالأوفرلي بدل الإيموجي،
    لأن إيموجي العلم المركّب (مثل 🇸🇦) ينكسر ويطلع كنص "SA" بويندوز/OBS (CEF) بدل الصورة الملونة */
 const LO_FLAGS=[
@@ -243,11 +242,6 @@ return `<div class="service-interface" style="padding:0">
 .lo-place-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0a1828;border:2px solid rgba(255,215,0,.4);border-radius:14px;padding:1rem;z-index:9999;box-shadow:0 20px 60px rgba(0,0,0,.9);min-width:255px}
 .lo-place-popup h4{color:#ffd700;font-size:.85rem;margin-bottom:.65rem;text-align:center}
 .lo-pl-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.32rem}
-.lo-pp-list{display:flex;flex-direction:column;gap:.3rem;max-height:320px;overflow-y:auto;margin-bottom:.8rem;padding-left:.2rem}
-.lo-pp-row{display:flex;align-items:center;gap:.5rem;background:rgba(255,255,255,.03);border-radius:7px;padding:.3rem .5rem}
-.lo-pp-row .lbl{color:#ccc;font-size:.76rem;font-weight:700;min-width:44px}
-.lo-pp-inp{flex:1;background:rgba(0,0,0,.4);border:1px solid rgba(255,215,0,.25);border-radius:6px;color:#ffd700;padding:4px 6px;font-size:.8rem;text-align:center;font-family:inherit;font-weight:700}
-.lo-pp-row .lo-pp-inp:focus{outline:none;border-color:#ffd700}
 .lo-pl-opt{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:7px;color:#ccc;padding:5px 3px;text-align:center;font-size:.76rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .14s;line-height:1.3}
 .lo-pl-opt:hover{background:rgba(255,215,0,.2);color:#ffd700;border-color:rgba(255,215,0,.4)}
 .lo-pl-cancel{margin-top:.55rem;width:100%;background:rgba(255,68,68,.12);border:1px solid rgba(255,68,68,.22);color:#f44;border-radius:8px;padding:5px;cursor:pointer;font-family:inherit;font-size:.78rem;font-weight:700}
@@ -262,6 +256,10 @@ return `<div class="service-interface" style="padding:0">
 .lo-cv-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.4rem .8rem}
 .lo-cv-item{display:flex;align-items:center;gap:6px;color:#aabbcc;font-size:.78rem;cursor:pointer}
 .lo-cv-item input{accent-color:#00e5ff;cursor:pointer}
+.lo-placement-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem}
+.lo-placement-item{display:flex;flex-direction:column;align-items:center;gap:3px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:.4rem}
+.lo-placement-item label{color:#8899aa;font-size:.65rem;font-weight:700}
+.lo-placement-item input{width:100%;text-align:center;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:6px;color:#ffd700;font-weight:700;font-size:.85rem;padding:.25rem 0}
 /* Background upload zones */
 .lo-bg-zone{background:rgba(255,255,255,.03);border:1.5px dashed rgba(0,229,255,.25);border-radius:10px;padding:.7rem;text-align:center;cursor:pointer;transition:all .2s;position:relative}
 .lo-bg-zone:hover{border-color:#00e5ff;background:rgba(0,229,255,.06)}
@@ -322,7 +320,6 @@ return `<div class="service-interface" style="padding:0">
     <button class="lo-tb-btn" style="background:#ffd700;color:#000" onclick="loOpenSpotlightWindow()" title="نافذة منفصلة شفافة — تطلع فيها بس الفرق المتبقية"><i class="fas fa-th"></i> نافذة الفرق المتبقية</button>
     <button class="lo-tb-btn" style="background:#ff4466;color:#fff" onclick="loOpenKillCardWindow()" title="نافذة منفصلة شفافة — تطلع فيها بس كارد كل قتلة"><i class="fas fa-skull"></i> نافذة كارد القتلة</button>
     <button class="lo-tb-btn" style="background:linear-gradient(135deg,#ffd700,#ff9800);color:#000;font-weight:900" onclick="loShowDist()">🏁 توزيع المراكز</button>
-    <button class="lo-tb-btn" style="background:rgba(255,215,0,.15);color:#ffd700;border:1px solid rgba(255,215,0,.3)" onclick="loOpenPlacementPtsEditor()" title="تحديد كم نقطة يستحق كل مركز">🎯 نقاط المراكز</button>
     <button class="lo-tb-btn" style="background:rgba(0,229,255,.15);color:#00e5ff;border:1px solid rgba(0,229,255,.3)" onclick="loNewRound()">↺ جولة جديدة</button>
     <button class="lo-tb-btn" style="background:rgba(255,80,0,.15);color:#ff8844;border:1px solid rgba(255,80,0,.25)" onclick="loReset()">🗑</button>
   </div>
@@ -554,6 +551,13 @@ return `<div class="service-interface" style="padding:0">
         </div>
       </div>
 
+      <!-- نقاط المراكز -->
+      <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:11px;padding:.9rem">
+        <div style="color:#00e5ff;font-size:.75rem;font-weight:800;margin-bottom:.7rem">🏆 نقاط المراكز</div>
+        <div style="color:#556677;font-size:.68rem;margin-bottom:.6rem">حدد كم نقطة ياخذ كل مركز عند التصفية — يتحدث تلقائياً على أي فريق مصنّف حالياً</div>
+        <div id="loPlacementGrid" class="lo-placement-grid"></div>
+      </div>
+
       <!-- الخلفيات -->
       <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:11px;padding:.9rem">
         <div style="color:#00e5ff;font-size:.75rem;font-weight:800;margin-bottom:.7rem">🖼️ خلفية الأوفرلي (صورة أو فيديو)</div>
@@ -703,15 +707,12 @@ function loInit(){
     try{ const sp=JSON.parse(localStorage.getItem('lo_spotlight_cfg')||'null'); if(sp) loSpotlightCfg={...loSpotlightCfg,...sp}; }catch(_){}
     try{ const av=JSON.parse(localStorage.getItem('lo_ocr_auto_apply')||'null'); if(av!==null) loOcrAutoApply=av; }catch(_){}
     try{ const si=parseInt(localStorage.getItem('lo_scan_interval')); if(si) loScanIntervalMs=si; }catch(_){}
-    /* نقاط المراكز المخصصة (إن وُجدت) */
-    try{
-        const pp=JSON.parse(localStorage.getItem('lo_placement_pts')||'null');
-        if(Array.isArray(pp) && pp.length) loPlacementPoints=pp;
-    }catch(_){}
+    try{ const pp=JSON.parse(localStorage.getItem('lo_placement_points')||'null'); if(Array.isArray(pp)) LO_PLACEMENT=pp; }catch(_){}
     loSyncColVisUI();
     loSyncEbUI();
     loSyncSpotlightUI();
     loSyncBgUI();
+    loSyncPlacementUI();
     const ocrChk=document.getElementById('loOcrAutoChk'); if(ocrChk) ocrChk.checked=loOcrAutoApply;
     const siSel=document.getElementById('loScanIntervalSel'); if(siSel) siSel.value=String(loScanIntervalMs);
 
@@ -789,9 +790,15 @@ function loBroadcast(){
     }
 
     /* مزامنة عبر الإنترنت (Firebase) — لأي جهاز ثاني مفتوح عليه أوفرلي/OBS بمكان آخر.
-       بيانات خفيفة بس (بدون فيديو/صور خلفية ثقيلة) حتى تبقى سريعة ورخيصة */
-    loFirebasePushState(settings);
+       بيانات خفيفة بس (بدون فيديو/صور خلفية ثقيلة) حتى تبقى سريعة ورخيصة.
+       نجمّعها (debounce) بدل إرسال نسخة كاملة مع كل حرف/نقرة: الإرسال المتكرر السريع
+       يكوّن طابور رسائل بنفس الاتصال، وكل رسالة قديمة لازم توصل قبل الجديدة — فيبان
+       تأخير واضح بالجهاز الثاني (وأسوأ كل ما البعد الجغرافي أكبر). البث المحلي فوق
+       (BroadcastChannel) ما يتأثر ويبقى فوري 100%. */
+    clearTimeout(_loFbStateTimer);
+    _loFbStateTimer=setTimeout(()=>loFirebasePushState(settings), 150);
 }
+let _loFbStateTimer=null;
 
 /* ════ Firebase — مزامنة الحالة بكسور الثانية بين أي جهازين ════ */
 const LO_FB_ROOM='default';
@@ -835,9 +842,24 @@ function loFirebasePushEvent(type,payload){
     if(!window.loFirebase) return Promise.reject(new Error('no-firebase'));
     try{
         const{db,ref,push,serverTimeOffset}=window.loFirebase;
-        return push(ref(db,`rooms/${LO_FB_ROOM}/events`),{type,...payload,ts:Date.now()+(serverTimeOffset||0)})
+        const p= push(ref(db,`rooms/${LO_FB_ROOM}/events`),{type,...payload,ts:Date.now()+(serverTimeOffset||0)})
             .catch(e=>{ console.warn('[Firebase] فشل رفع الحدث:',e); throw e; });
+        /* ننضّف الأحداث القديمة بين فترة وفترة — لو تركناها تتراكم للأبد (أيام/بطولات)
+           راح تصير مسؤولة عن بطء متزايد بكل استعلام/استماع جديد على نفس المسار */
+        if(Math.random()<0.1) loFirebasePruneOldEvents();
+        return p;
     }catch(e){ console.warn('[Firebase] خطأ غير متوقع بحدث:',e); return Promise.reject(e); }
+}
+function loFirebasePruneOldEvents(){
+    if(!window.loFirebase) return;
+    try{
+        const{db,ref,query,orderByChild,endAt,onValue,remove,serverTimeOffset}=window.loFirebase;
+        const cutoff=Date.now()+(serverTimeOffset||0)-(2*60*60*1000); /* أقدم من ساعتين */
+        const oldQuery=query(ref(db,`rooms/${LO_FB_ROOM}/events`), orderByChild('ts'), endAt(cutoff));
+        onValue(oldQuery, snap=>{
+            snap.forEach(child=>{ remove(child.ref).catch(()=>{}); });
+        }, { onlyOnce:true });
+    }catch(e){ console.warn('[Firebase] فشل تنظيف الأحداث القديمة:',e); }
 }
 /* أول ما يجهز Firebase (قد يوصل متأخر عن أول تحميل)، نعيد رفع آخر حالة حتى توصل الأجهزة الثانية */
 window.addEventListener('lo-firebase-ready', ()=>{ try{ loBroadcast(); }catch(_){} });
@@ -1069,7 +1091,7 @@ async function loFetchMatch(matchId,shard,key){
     matchTeams.forEach(team=>{
         const teamName=team.members.map(m=>m.name).join(' / ');
         const kills=team.members.reduce((s,m)=>s+m.kills,0);
-        const pts=loPlacementPoints[team.placement]||0;
+        const pts=LO_PLACEMENT[team.placement]||0;
         const existing=loTeams.find(lt=>team.members.some(m=>lt.name.toLowerCase().includes(m.name.toLowerCase())));
         if(existing){
             existing.kills=kills; existing.placementPts=pts; existing.place=team.placement;
@@ -1193,6 +1215,27 @@ function loSyncColVisUI(){
     });
 }
 
+/* ════ نقاط المراكز — قابلة للتعديل من لوحة التحكم ════ */
+function loSyncPlacementUI(){
+    const grid=document.getElementById('loPlacementGrid'); if(!grid) return;
+    const maxPlace=LO_PLACEMENT.length-1;
+    grid.innerHTML=Array.from({length:maxPlace},(_,i)=>i+1).map(p=>
+        `<div class="lo-placement-item">
+            <label>#${p}</label>
+            <input type="number" min="0" value="${LO_PLACEMENT[p]||0}" onchange="loSetPlacementPoint(${p},this.value)">
+        </div>`
+    ).join('');
+}
+function loSetPlacementPoint(place,val){
+    const pts=Math.max(0,parseInt(val)||0);
+    LO_PLACEMENT[place]=pts;
+    localStorage.setItem('lo_placement_points',JSON.stringify(LO_PLACEMENT));
+    /* أي فريق مصنّف حالياً بهذا المركز يتحدث فوراً */
+    loTeams.forEach(t=>{ if(t.place===place) t.placementPts=pts; });
+    loRenderTable();
+    loBroadcast();
+}
+
 /* ════ Actions ════ */
 function loTogP(tid,pi){
     const t=loTeams.find(t=>t.id===tid); if(!t) return;
@@ -1218,7 +1261,7 @@ function loAutoPlaceOnElim(t){
     const aliveCount=loTeams.filter(tm=>!loEliminationOrder.includes(tm.id)).length;
     const place=aliveCount+1;
     t.place=place;
-    t.placementPts=loPlacementPoints[place]||0;
+    t.placementPts=LO_PLACEMENT[place]||0;
 }
 
 /* إرسال حدث إقصاء لعرضه كبانر بشاشة الأوفرلي — reason اختياري (مثلاً "مخالفة القوانين") */
@@ -1648,55 +1691,20 @@ function loDefaultTeams(){
 function loOpenPlace(tid,rank){
     document.getElementById('lo-place-popup-el')?.remove();
     const pop=document.createElement('div'); pop.id='lo-place-popup-el'; pop.className='lo-place-popup';
-    const opts=Array.from({length:16},(_,i)=>i+1).map(p=>`<button class="lo-pl-opt" onclick="loSetP(${tid},${p},${loPlacementPoints[p]||0})">#${p}<br><small style="color:#ffd70088">+${loPlacementPoints[p]||0}</small></button>`).join('');
+    const opts=Array.from({length:16},(_,i)=>i+1).map(p=>`<button class="lo-pl-opt" onclick="loSetP(${tid},${p},${LO_PLACEMENT[p]||0})">#${p}<br><small style="color:#ffd70088">+${LO_PLACEMENT[p]||0}</small></button>`).join('');
     pop.innerHTML=`<h4>📍 مكان الفريق</h4><div class="lo-pl-grid">${opts}</div><button class="lo-pl-cancel" onclick="document.getElementById('lo-place-popup-el')?.remove()">إلغاء</button>`;
     document.body.appendChild(pop);
     setTimeout(()=>document.addEventListener('click',function h(e){ if(!pop.contains(e.target)){pop.remove();document.removeEventListener('click',h);} }),100);
 }
 function loSetP(tid,place,pts){ const t=loTeams.find(t=>t.id===tid); if(t){t.place=place;t.placementPts=pts;} document.getElementById('lo-place-popup-el')?.remove(); loRenderTable(); loBroadcast(); }
 
-/* ════ محرر نقاط المراكز — تحديد كم نقطة يستحق كل مركز (1 → 16) ════ */
-function loOpenPlacementPtsEditor(){
-    document.getElementById('lo-place-popup-el')?.remove();
-    const pop=document.createElement('div'); pop.id='lo-place-popup-el'; pop.className='lo-place-popup'; pop.style.minWidth='230px';
-    const rows=Array.from({length:16},(_,i)=>i+1).map(p=>`
-        <div class="lo-pp-row">
-            <span class="lbl">#${p}</span>
-            <input type="number" class="lo-pp-inp" id="loPp_${p}" value="${loPlacementPoints[p]||0}" min="0" step="1">
-        </div>`).join('');
-    pop.innerHTML=`<h4>🎯 نقاط المراكز</h4>
-        <div class="lo-pp-list">${rows}</div>
-        <div class="lo-pl-cancel-row" style="display:flex;gap:.4rem">
-            <button class="lo-dist-ok" style="flex:1" onclick="loSavePlacementPts()">✅ حفظ</button>
-            <button class="lo-dist-cancel" style="flex:1" onclick="loResetPlacementPts()">↺ افتراضي</button>
-        </div>
-        <button class="lo-pl-cancel" style="margin-top:.5rem;width:100%" onclick="document.getElementById('lo-place-popup-el')?.remove()">إغلاق</button>`;
-    document.body.appendChild(pop);
-}
-function loSavePlacementPts(){
-    const updated=Array.from({length:16},(_,i)=>i+1).map(p=>{
-        const el=document.getElementById(`loPp_${p}`);
-        return Math.max(0, parseInt(el?.value)||0);
-    });
-    loPlacementPoints=[0,...updated];
-    try{ localStorage.setItem('lo_placement_pts', JSON.stringify(loPlacementPoints)); }catch(_){}
-    document.getElementById('lo-place-popup-el')?.remove();
-    loToast('🎯 تم حفظ نقاط المراكز!','ok');
-}
-function loResetPlacementPts(){
-    loPlacementPoints=[...LO_PLACEMENT_DEFAULT];
-    try{ localStorage.setItem('lo_placement_pts', JSON.stringify(loPlacementPoints)); }catch(_){}
-    document.getElementById('lo-place-popup-el')?.remove();
-    loToast('↺ رجعت نقاط المراكز للوضع الافتراضي','ok');
-}
-
 /* ════ Distribute ════ */
 function loShowDist(){
     document.getElementById('lo-dist-popup-el')?.remove();
     const sorted=loSorted(), elim=[...loEliminationOrder].reverse(), alive=loTeams.filter(t=>!loEliminationOrder.includes(t.id)).sort((a,b)=>loTotal(b)-loTotal(a));
     let place=1; const preview=[];
-    alive.forEach(t=>{ preview.push({id:t.id,name:t.name,place,pts:loPlacementPoints[place]||0,how:'حي'}); place++; });
-    elim.forEach(tid=>{ const t=loTeams.find(t=>t.id===tid); if(!t) return; preview.push({id:t.id,name:t.name,place,pts:loPlacementPoints[place]||0,how:`مات #${loEliminationOrder.indexOf(tid)+1}`}); place++; });
+    alive.forEach(t=>{ preview.push({id:t.id,name:t.name,place,pts:LO_PLACEMENT[place]||0,how:'حي'}); place++; });
+    elim.forEach(tid=>{ const t=loTeams.find(t=>t.id===tid); if(!t) return; preview.push({id:t.id,name:t.name,place,pts:LO_PLACEMENT[place]||0,how:`مات #${loEliminationOrder.indexOf(tid)+1}`}); place++; });
     const pop=document.createElement('div'); pop.id='lo-dist-popup-el'; pop.className='lo-dist-popup';
     pop.innerHTML=`<h4>🏁 توزيع نقاط المراكز</h4><p>الفرق الحية → أفضل مراكز | الميتون بالترتيب → الأسوأ</p>
     <div class="lo-dist-list">${preview.map(p=>`<div class="lo-di"><span class="r">${p.place<=3?['🥇','🥈','🥉'][p.place-1]:'#'+p.place}</span><span class="n">${p.name}</span><span style="color:#667;font-size:.7rem">${p.how}</span><span class="p">+${p.pts}</span></div>`).join('')}</div>
