@@ -34,7 +34,7 @@ html, body {
      الأداة تشتغل محلياً بس (نفس الجهاز) عادي بدون أي كسر بالوظائف. -->
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-    import { getDatabase, ref, set, onValue, push, query, orderByChild, startAt, onChildAdded } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
+    import { getDatabase, ref, set, onValue, push, query, orderByChild, startAt, endAt, limitToLast, onChildAdded, remove } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
     import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js";
 
     const firebaseConfig = {
@@ -51,7 +51,7 @@ html, body {
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
         const storage = getStorage(app);
-        window.loFirebase = { db, ref, set, onValue, push, query, orderByChild, startAt, onChildAdded, storage, sRef, uploadBytes, getDownloadURL, serverTimeOffset: 0 };
+        window.loFirebase = { db, ref, set, onValue, push, query, orderByChild, startAt, endAt, limitToLast, onChildAdded, remove, storage, sRef, uploadBytes, getDownloadURL, serverTimeOffset: 0 };
 
         /* فرق الساعة بين هذا الجهاز وسيرفرات فايربيس — نستخدمه لاحقاً بكل مكان نحسب فيه Date.now()
            حتى ما تنفرد ساعة هذا الجهاز بتحديد "وقت" الحدث. ننتظره قبل لا نعلن الجاهزية. */
