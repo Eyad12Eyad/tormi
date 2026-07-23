@@ -54,6 +54,7 @@ let loPendingKillToken=0;
 let loScanMode='killfeed';         /* killfeed = يراقب سطر قتل واحد | board = يقرأ لوحة كل الفرق كاملة كل مسحة */
 let loLastBoardSnapshot=null;      /* نسخة احتياطية من حالة الفرق قبل آخر مزامنة شاملة (لدعم التراجع) */
 let loElimBannerCfg={xPct:50,yPct:50,scale:1}; /* مكان حر (نسبة%) وحجم بانر الإقصاء */
+let loNameToggleCfg={enabled:true,seconds:2}; /* تبديل الاسم الكامل/الاختصار بجدول الأوفرلي */
 let loSpotlightCfg={enabled:true,triggerCount:5,cycles:3}; /* عرض الفرق المتبقية الدوّار */
 let loTeamElimBg={}; /* {tid: {type,data}} خلفية إقصاء خاصة لكل فريق */
 
@@ -551,6 +552,19 @@ return `<div class="service-interface" style="padding:0">
         </div>
       </div>
 
+      <!-- تبديل الاسم الكامل / الاختصار -->
+      <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:11px;padding:.9rem">
+        <div style="color:#00e5ff;font-size:.75rem;font-weight:800;margin-bottom:.7rem">🔤 تبديل اسم الفريق ↔ الاختصار</div>
+        <label class="lo-cv-item" style="margin-bottom:.6rem">
+            <input type="checkbox" id="loNtEnabled" onchange="loSetNameToggle('enabled',this.checked)">
+            تفعيل التبديل التلقائي بجدول الأوفرلي
+        </label>
+        <div style="display:flex;align-items:center;gap:.5rem">
+            <span style="color:#8899aa;font-size:.72rem">مدة كل عرض (ثواني):</span>
+            <input class="lo-inp" type="number" id="loNtSeconds" min="1" max="30" step="1" style="width:70px" onchange="loSetNameToggle('seconds',this.value)">
+        </div>
+      </div>
+
       <!-- نقاط المراكز -->
       <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:11px;padding:.9rem">
         <div style="color:#00e5ff;font-size:.75rem;font-weight:800;margin-bottom:.7rem">🏆 نقاط المراكز</div>
@@ -704,6 +718,7 @@ function loInit(){
     try{ const cv=JSON.parse(localStorage.getItem('lo_colvis')||'null'); if(cv) loColVis={...loColVis,...cv}; }catch(_){}
     /* إعدادات بانر الإقصاء (مكان/حجم — بيانات صغيرة، localStorage مناسب لها) */
     try{ const eb=JSON.parse(localStorage.getItem('lo_elim_banner_cfg')||'null'); if(eb) loElimBannerCfg={...loElimBannerCfg,...eb}; }catch(_){}
+    try{ const nt=JSON.parse(localStorage.getItem('lo_name_toggle_cfg')||'null'); if(nt) loNameToggleCfg={...loNameToggleCfg,...nt}; }catch(_){}
     try{ const sp=JSON.parse(localStorage.getItem('lo_spotlight_cfg')||'null'); if(sp) loSpotlightCfg={...loSpotlightCfg,...sp}; }catch(_){}
     try{ const av=JSON.parse(localStorage.getItem('lo_ocr_auto_apply')||'null'); if(av!==null) loOcrAutoApply=av; }catch(_){}
     try{ const si=parseInt(localStorage.getItem('lo_scan_interval')); if(si) loScanIntervalMs=si; }catch(_){}
@@ -713,6 +728,7 @@ function loInit(){
     loSyncSpotlightUI();
     loSyncBgUI();
     loSyncPlacementUI();
+    loSyncNameToggleUI();
     const ocrChk=document.getElementById('loOcrAutoChk'); if(ocrChk) ocrChk.checked=loOcrAutoApply;
     const siSel=document.getElementById('loScanIntervalSel'); if(siSel) siSel.value=String(loScanIntervalMs);
 
@@ -760,6 +776,7 @@ function loBroadcast(){
         colVis:loColVis,
         bg:loBgSettings,           /* قد تحتوي فيديو/صور base64 ثقيلة */
         elimBanner:loElimBannerCfg,
+        nameToggle:loNameToggleCfg,
         spotlight:loSpotlightCfg,
         teamElimBg:loTeamElimBg,  /* خلفيات إقصاء خاصة بكل فريق — قد تكون ثقيلة أيضاً */
     };
@@ -1155,6 +1172,7 @@ function loRenderTable(){
           <td data-col="total"><span class="lo-total" style="color:${rank===1?'#ffd700':rank<=3?'#00e5ff':'#ccc'}">${pts}</span></td>
           <td style="display:flex;gap:4px;align-items:center;justify-content:center;white-space:nowrap">
             <button class="lo-eb-team-btn ${loTeamElimBg[t.id]?'has':''}" onclick="loOpenTeamElimBg(${t.id})" title="خلفية إقصاء خاصة بهذا الفريق">🎬</button>
+            <button class="lo-del-btn" style="background:rgba(255,77,77,.15);border-color:rgba(255,77,77,.35);color:#ff4d4d" onclick="loDisqualifyTeam(${t.id})" title="إقصاء لمخالفة القوانين">🚫</button>
             <button class="lo-del-btn" onclick="loDel(${t.id})">✕</button>
           </td>
         </tr>`;
@@ -1213,6 +1231,17 @@ function loSyncColVisUI(){
         const el=document.getElementById('loCv_'+col);
         if(el) el.checked=!!loColVis[col];
     });
+}
+
+/* ════ تبديل الاسم/الاختصار — قابل للتعطيل وتحديد المدة ════ */
+function loSyncNameToggleUI(){
+    const en=document.getElementById('loNtEnabled'); if(en) en.checked=!!loNameToggleCfg.enabled;
+    const sc=document.getElementById('loNtSeconds'); if(sc) sc.value=loNameToggleCfg.seconds||2;
+}
+function loSetNameToggle(key,val){
+    loNameToggleCfg[key]= key==='enabled' ? !!val : Math.max(1,parseInt(val)||2);
+    localStorage.setItem('lo_name_toggle_cfg',JSON.stringify(loNameToggleCfg));
+    loBroadcast();
 }
 
 /* ════ نقاط المراكز — قابلة للتعديل من لوحة التحكم ════ */
@@ -1300,7 +1329,10 @@ function loDisqualifyTeam(tid){
         loEliminationOrder.push(tid);
         loAutoPlaceOnElim(t);
     }
-    loAnnounceElimination(t,'مخالفة القوانين');
+    /* ما نطلق بانر الإقصاء المنبثق هنا — بس نعلّم الفريق كمقصى بشريط التيمات (أحمر) */
+    t.disqualified=true;
+    t.dqReason='مخالفة القوانين';
+    loToast(`🚫 ${t.name} أُقصي لمخالفة القوانين — المركز #${t.place}`,'warn');
     loRenderTable(); loBroadcast();
 }
 
