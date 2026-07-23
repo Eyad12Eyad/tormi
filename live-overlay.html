@@ -158,6 +158,12 @@ html,body { background:transparent; font-family:'Rajdhani','Segoe UI',Arial,sans
     transition:color .3s;
     letter-spacing:.2px;
 }
+.t-dq-badge{
+    display:flex; align-items:center; gap:5px;
+    color:#ff3b3b; font-weight:800; font-size:11px;
+    white-space:nowrap; flex-shrink:0;
+}
+.t-dq-reason{ color:#ff8a8a; font-weight:600; font-size:10px; }
 
 /* ════ PLAYER BARS ════ */
 .p-bars {
@@ -563,14 +569,21 @@ async function processElimQueue(){
     }
 }
 
-/* ── Name toggle every 2 s ──
+/* ── Name toggle — يمكن تعطيله أو تحديد مدته من لوحة التحكم (currentSettings.nameToggle) ──
    نستخدم lastTeams (آخر بيانات معتمدة فعلياً من فايربيس/BroadcastChannel) بدل قراءة
    localStorage من جديد، حتى ما نرجع نعرض بيانات محلية قديمة/عالقة بجهاز الأوفرلي */
-setInterval(() => {
-    if (!lastTeams.length) return;
-    lastTeams.forEach(t => { nameToggle[t.id] = !nameToggle[t.id]; });
-    render(lastTeams);
-}, 2000);
+let _nameToggleTimer=null;
+function applyNameToggleSettings(cfg){
+    clearInterval(_nameToggleTimer);
+    if(!cfg || cfg.enabled===false) return; /* الافتراضي: مفعّل إلا إذا انحدد enabled=false صراحة */
+    const ms=Math.max(1,cfg.seconds||2)*1000;
+    _nameToggleTimer=setInterval(() => {
+        if (!lastTeams.length) return;
+        lastTeams.forEach(t => { nameToggle[t.id] = !nameToggle[t.id]; });
+        render(lastTeams);
+    }, ms);
+}
+applyNameToggleSettings(currentSettings.nameToggle);
 
 /* ── Poll localStorage (فقط كخط دفاع أخير لنفس الجهاز، ولو ماكو تحديث أحدث وصل أصلاً) ── */
 setInterval(() => {
@@ -615,6 +628,9 @@ function applySettings(){
 
     /* مكان وحجم بانر إشعار الإقصاء */
     applyElimBannerSettings(currentSettings.elimBanner);
+
+    /* تبديل الاسم/الاختصار — يعاد ضبط المؤقت أي مرة تتغير الإعدادات (تفعيل/تعطيل/مدة) */
+    applyNameToggleSettings(currentSettings.nameToggle);
 }
 
 /* مكان بانر الإقصاء أصبح حر بالكامل (نقطة x%,y% محفوظة من لوحة التحكم عبر السحب) */
@@ -669,6 +685,7 @@ function render(teams) {
         const allAlive = players.every(p => p.status === 'alive');
         const allElim  = players.every(p => p.status === 'eliminated');
         const name     = nameToggle[t.id] ? (t.abbr || t.name.slice(0,4).toUpperCase()) : t.name;
+        const dqBadge  = t.disqualified ? `<div class="t-dq-badge">تم الإقصاء${t.dqReason?`<span class="t-dq-reason">${t.dqReason}</span>`:''}</div>` : '';
         const bars     = players.map(p => `<div class="pbar ${p.status}" title="${p.name||''}"></div>`).join('');
         /* العلم يُعرض كصورة حقيقية (flagcdn) لا كإيموجي — إيموجي الأعلام المركّبة تنكسر على ويندوز/OBS (CEF)
            وتطلع كنص حروف الدولة بدل الصورة الملونة. t.flag يخزّن كود الدولة (مثل 'iq'، 'sa') أو 'none' */
@@ -687,6 +704,7 @@ function render(teams) {
                 ${logoOrFlag}
                 <div class="t-color-dot" style="background:${t.color || '#aaa'};color:${t.color || '#aaa'}"></div>
                 <div class="t-name" style="color:${allAlive ? '#fff' : (allElim ? '#666' : '#e2e2e2')}">${name}</div>
+                ${dqBadge}
             </div>
             <div class="p-bars">${bars}</div>
             <div class="t-pts">${pts}</div>
